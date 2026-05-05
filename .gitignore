@@ -1,0 +1,4 @@
+.env
+scraping.py
+scraped_classes.txt
+__pycache__
