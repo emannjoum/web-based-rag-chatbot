@@ -52,12 +52,13 @@ def get_altibbi_context(query): # Tavily Search
         st.error(f"Tavily Search Error: {e}")
         return "", {}
 
+# TODO:: serper, filter websites post search, irrelevant search results
+
 def get_manual_scrape_context(query):
     try:
         search_query = f"{query} site:altibbi.com"
         links = []
         
-        # Use the DDGS context manager to fetch top 3 links safely
         with DDGS() as ddgs:
             results = ddgs.text(search_query, max_results=3)
             if results:
@@ -95,13 +96,8 @@ def get_manual_scrape_context(query):
                 if len(text) > 20:
                     content_parts.append(text)
 
-            # join paragraphs with double newlines to see the structure
             full_body = "\n\n".join(content_parts)
-
-            # clean up extra horizontal spaces, but leave the newlines alone
             full_body = re.sub(r'[ \t]+', ' ', full_body)
-
-            # cap multiple blank lines at a maximum of two
             full_body = re.sub(r'\n{3,}', '\n\n', full_body)
             
             sources_dict[i] = url
@@ -124,12 +120,13 @@ def build_system_prompt(context):
     ROLE: You are the official Altibbi Medical AI Assistant. 
     CONSTRAINTS:
     1. Base your answers on the "Context from Altibbi" provided below AND the previous conversation history.
-    2. If neither the context nor the conversation history contains the answer, state: "I couldn't find specific information on Altibbi." or الطبي instead of Altibbi if in Arabic.
+    2. If neither the context nor the conversation history contains the answer, state: "I couldn't find specific information on Altibbi." or " لم أتمكن من العثور على الإجابة من الطبي " instead if in Arabic.
     3. ALWAYS cite facts INLINE immediately after the relevant statement using the source number (e.g., "Paracetamol is used to treat fever [1].").
     4. DO NOT generate a "Sources", "References", or "Links" list at the end of your response. Only use the inline bracket format.
     5. Answer in the same language as the input query.
     6. Try to structure your response beautifully using Markdown headers (e.g., الأسباب, الأعراض, العلاج) and bullet points for readability.
-    
+    7. Never answer off-topic queries, only answer medical ones that do have an answer in the context from altibbi below. Do not use your own knowledge.
+
     CONTEXT FROM ALTIBBI FOR CURRENT QUESTION:
     {context}
     """
@@ -154,8 +151,6 @@ if user_query := st.chat_input("Ask Altibbi..."):
         else:
             new_context, new_sources = get_manual_scrape_context(user_query)
             
-        # only pass the fresh context to the prompt. 
-        # remember the rest via the st.session_state.messages history
         sys_prompt = build_system_prompt(new_context)
 
         try:
@@ -182,7 +177,6 @@ if user_query := st.chat_input("Ask Altibbi..."):
                 response = chat.send_message(user_query)
                 ai_reply = response.text
 
-            # RENDER RESPONSE
             with st.chat_message("assistant"):
                 st.markdown(make_links_clickable(ai_reply, new_sources))
                 if new_sources:
