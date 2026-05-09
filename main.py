@@ -131,6 +131,43 @@ def build_system_prompt(context):
     {context}
     """
 
+def refine_query(user_query, chat_history, model_choice):
+    if not chat_history:
+        return user_query
+
+    history_str = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history[-3:]]) # last 3 exchanges
+
+    refine_prompt = f"""
+    Given the following conversation history and the last follow-up question, 
+    rephrase the last question to be a standalone search query that 
+    includes all necessary context (medical terms, drug names, conditions).
+    Example: Message 1: ما هو البانادول
+    Message 2: هل له اعراض جانبية؟
+    last_question: هل للبنادول اعراض جانبية؟
+    You should ONLY return the last_question.
+
+    CONVERSATION HISTORY:
+    {history_str}
+    
+    FOLLOW-UP QUESTION: {user_query}
+    
+    last_question:"""
+
+    try:
+        if model_choice == "GPT-4o mini":
+            response = client_openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": refine_prompt}],
+                temperature=0
+            )
+            return response.choices[0].message.content.strip()
+        else:
+            model = genai.GenerativeModel("gemini-2.5-flash-lite") 
+            response = model.generate_content(refine_prompt)
+            return response.text.strip()
+    except Exception as e:
+        return user_query # Fallback to original query if LLM fails
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -142,14 +179,17 @@ for message in st.session_state.messages:
 
 if user_query := st.chat_input("Ask Altibbi..."):
     st.chat_message("user").markdown(user_query)
+    
+    with st.spinner("Refining search query..."):
+        search_query = refine_query(user_query, st.session_state.messages, selected_model)
+    
     st.session_state.messages.append({"role": "user", "content": user_query})
 
-    with st.spinner(f"Retrieving context via {search_method}..."):
-        
+    with st.spinner(f"Searching Altibbi for: '{search_query}'..."):
         if search_method == "Tavily":
-            new_context, new_sources = get_altibbi_context(user_query)
+            new_context, new_sources = get_altibbi_context(search_query) 
         else:
-            new_context, new_sources = get_manual_scrape_context(user_query)
+            new_context, new_sources = get_manual_scrape_context(search_query) 
             
         sys_prompt = build_system_prompt(new_context)
 
