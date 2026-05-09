@@ -5,3 +5,5 @@ google-generativeai
 googlesearch-python
 tavily-python
 openai
+dotenv
+ddgs
