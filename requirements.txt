@@ -7,3 +7,4 @@ tavily-python
 openai
 dotenv
 ddgs
+pymongo
