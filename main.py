@@ -3,23 +3,32 @@ import google.generativeai as genai
 from openai import OpenAI
 from tavily import TavilyClient
 from bs4 import BeautifulSoup
-from urllib.parse import quote, urljoin 
+from urllib.parse import quote, urljoin, urlparse
 from dotenv import load_dotenv
 from ddgs import DDGS 
 import requests
 import os
 import re
+from database import get_db_instance
+
+db = get_db_instance()
 
 load_dotenv()
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
 tavily = TavilyClient(api_key=TAVILY_API_KEY)
 client_openai = OpenAI(api_key=OPENAI_API_KEY)
 genai.configure(api_key=GEMINI_API_KEY)
 
 st.set_page_config(page_title="Altibbi Chatbot", layout="wide")
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = None
 
 with st.sidebar:
     st.title("Settings")
@@ -29,10 +38,38 @@ with st.sidebar:
     )
     search_method = st.selectbox(
         "Context Retrieval Method:",
-        ["Tavily", "Manual Scraping"]
+        ["Tavily", "Serper", "Manual Scraping"]
     )
+
+    if st.button("New Chat", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.current_chat_id = None
+        st.rerun()
+    
     st.divider()
-    st.info(f"Model: **{selected_model}**\n\nMethod: **{search_method}**")
+    
+    st.subheader("Recent History")
+    history_records = db.get_all_history(limit=15)
+    if history_records:
+        for chat in history_records:
+            query_text = chat.get("summary", {}).get("last_query", "Empty Chat")
+            chat_label = query_text[:30] + "..."
+            
+            if st.button(chat_label, key=str(chat["_id"]), use_container_width=True):
+                st.session_state.messages = chat.get("history", [])
+                st.session_state.current_chat_id = str(chat["_id"])
+                st.rerun()
+    else:
+        st.caption("No history yet.")
+    st.divider()
+    
+
+def is_trusted_source(url, allowed_domain="altibbi.com"):
+    try:
+        netloc = urlparse(url).netloc.lower()
+        return allowed_domain in netloc
+    except Exception:
+        return False
 
 def get_altibbi_context(query): # Tavily Search
     try:
@@ -44,29 +81,32 @@ def get_altibbi_context(query): # Tavily Search
         )
         context_text = ""
         sources_dict = {} 
+        all_retrieved_urls = []
         for i, result in enumerate(response.get("results", []), start=1):
+            all_retrieved_urls.append(result['url'])
             sources_dict[i] = result['url']
             context_text += f"Source [{i}]\nURL: {result['url']}\nContent: {result['content']}\n\n"
-        return context_text, sources_dict
+        return context_text, sources_dict, all_retrieved_urls
     except Exception as e:
         st.error(f"Tavily Search Error: {e}")
-        return "", {}
-
-# TODO:: serper, filter websites post search, irrelevant search results
+        return "", {}, []
 
 def get_manual_scrape_context(query):
     try:
         search_query = f"{query} site:altibbi.com"
         links = []
+        all_retrieved_urls = []
         
         with DDGS() as ddgs:
-            results = ddgs.text(search_query, max_results=3)
+            results = ddgs.text(search_query, max_results=5) # Fetch more for filtering
             if results:
                 for r in results:
-                    links.append(r['href'])
+                    all_retrieved_urls.append(r['href'])
+                    if is_trusted_source(r['href']):
+                        links.append(r['href'])
         
         if not links:
-            return "No direct results found via manual scrape.", {}
+            return "No direct results found via manual scrape.", {}, all_retrieved_urls
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -75,7 +115,7 @@ def get_manual_scrape_context(query):
         context_text = ""
         sources_dict = {}
         
-        for i, url in enumerate(links, start=1):
+        for i, url in enumerate(links[:3], start=1):
             page_res = requests.get(url, headers=headers, timeout=5)
             page_soup = BeautifulSoup(page_res.text, 'html.parser')
             
@@ -103,11 +143,54 @@ def get_manual_scrape_context(query):
             sources_dict[i] = url
             context_text += f"Source [{i}]\nURL: {url}\nContent: {full_body[:1500]}\n\n"
             
-        return context_text, sources_dict
+        return context_text, sources_dict, all_retrieved_urls
 
     except Exception as e:
         st.error(f"Scraping Error: {e}")
-        return "", {}
+        return "", {}, []
+
+def get_serper_context(query):
+    try:
+        url = "https://google.serper.dev/search"
+        payload = {
+            "q": f"{query} site:altibbi.com",
+            "gl": "jo", 
+            "hl": "ar", 
+            "num": 10 
+        }
+        headers = {
+            'X-API-KEY': SERPER_API_KEY,
+            'Content-Type': 'application/json'
+        }
+        
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        search_results = response.json()
+        
+        context_text = ""
+        sources_dict = {}
+        all_retrieved_urls = []
+        valid_count = 1
+    
+        for result in search_results.get("organic", []):
+            link = result.get("link")
+            all_retrieved_urls.append(link)
+            
+            if not is_trusted_source(link):
+                continue 
+                
+            snippet = result.get("snippet", "")
+            sources_dict[valid_count] = link
+            context_text += f"Source [{valid_count}]\nURL: {link}\nContent: {snippet}\n\n"
+            valid_count += 1
+            
+            if valid_count > 3: 
+                break
+
+        return context_text, sources_dict, all_retrieved_urls
+    except Exception as e:
+        st.error(f"Serper Search Error: {e}")
+        return "", {}, []
 
 def make_links_clickable(text, sources):
     if not sources: return text
@@ -135,7 +218,7 @@ def refine_query(user_query, chat_history, model_choice):
     if not chat_history:
         return user_query
 
-    history_str = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history[-3:]]) # last 3 exchanges
+    history_str = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history[-3:]]) 
 
     refine_prompt = f"""
     Given the following conversation history and the last follow-up question, 
@@ -166,10 +249,43 @@ def refine_query(user_query, chat_history, model_choice):
             response = model.generate_content(refine_prompt)
             return response.text.strip()
     except Exception as e:
-        return user_query # Fallback to original query if LLM fails
+        return user_query 
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+def log_to_file_and_terminal(query, search_query, all_urls, filtered_sources, raw_context, response):
+    log_file_path = "altibbi_chat_logs.txt"
+    
+    log_entry = [
+        "\n" + "="*50,
+        f"USER QUERY: {query}",
+        f"RESHAPED QUERY: {search_query}",
+        "-" * 50,
+        f"ALL URLS RETRIEVED ({len(all_urls)}):"
+    ]
+    
+    for url in all_urls:
+        log_entry.append(f"   - {url}")
+        
+    log_entry.append(f"\nVALID SOURCES USED (Post-Filter):")
+    for sid, url in filtered_sources.items():
+        log_entry.append(f"   [{sid}] {url}")
+        
+    log_entry.append("-" * 50)
+    
+    log_entry.append("RAW SCRAPED DATA SENT TO LLM:")
+    log_entry.append(raw_context if raw_context else "No context retrieved.")
+    
+    log_entry.append("-" * 50)
+    
+    llm_citations = list(set(re.findall(r"\[(\d+)\]", response)))
+    log_entry.append(f"SOURCES CITED BY LLM: {llm_citations}")
+    log_entry.append(f"\nFINAL LLM RESPONSE:\n{response}")
+    log_entry.append("="*50 + "\n")
+    
+    full_log_text = "\n".join(log_entry)
+    print(f"Logged query: {query} (Citations: {llm_citations})")
+
+    with open(log_file_path, "a", encoding="utf-8") as f:
+        f.write(full_log_text)
 
 st.title("Altibbi Chatbot")
 
@@ -187,9 +303,11 @@ if user_query := st.chat_input("Ask Altibbi..."):
 
     with st.spinner(f"Searching Altibbi for: '{search_query}'..."):
         if search_method == "Tavily":
-            new_context, new_sources = get_altibbi_context(search_query) 
+            new_context, new_sources, raw_urls = get_altibbi_context(search_query) 
+        elif search_method == "Serper":
+            new_context, new_sources, raw_urls = get_serper_context(search_query)
         else:
-            new_context, new_sources = get_manual_scrape_context(search_query) 
+            new_context, new_sources, raw_urls = get_manual_scrape_context(search_query) 
             
         sys_prompt = build_system_prompt(new_context)
 
@@ -217,6 +335,8 @@ if user_query := st.chat_input("Ask Altibbi..."):
                 response = chat.send_message(user_query)
                 ai_reply = response.text
 
+            log_to_file_and_terminal(user_query, search_query, raw_urls, new_sources, new_context, ai_reply)
+
             with st.chat_message("assistant"):
                 st.markdown(make_links_clickable(ai_reply, new_sources))
                 if new_sources:
@@ -229,6 +349,20 @@ if user_query := st.chat_input("Ask Altibbi..."):
                 "content": ai_reply,
                 "sources": new_sources
             })
-
+            
+            new_id = db.log_interaction(
+            chat_id=st.session_state.current_chat_id,
+            query=user_query,
+            response=ai_reply,
+            search_params={"query": search_query}, 
+            sources=new_sources,
+            metadata={"model": selected_model, "method": search_method} 
+        )
+            
+            if not st.session_state.current_chat_id:
+                st.session_state.current_chat_id = new_id
+            
+            st.rerun()
+                    
         except Exception as e:
             st.error(f"AI Generation Error: {e}")
