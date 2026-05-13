@@ -3,7 +3,7 @@ import datetime
 from pymongo import MongoClient
 import streamlit as st
 from dotenv import load_dotenv
-from bson import ObjectId
+from bson.objectid import ObjectId
 
 load_dotenv()
 
@@ -46,7 +46,10 @@ class AltibbiDB:
         if chat_id:
             self.chats.update_one(
                 {"_id": ObjectId(chat_id)},
-                {"$push": {"history": {"$each": new_messages}}}
+                {
+                    "$push": {"history": {"$each": new_messages}},
+                    "$inc": {"summary.interaction_count": 1}
+                    }
             )
             return chat_id
         else:
@@ -76,6 +79,33 @@ class AltibbiDB:
             print(f"Error fetching specific chat: {e}")
             return None
         
+    def update_eval_scores(self, chat_id, ragas_scores):
+        try:
+            if not chat_id:
+                return
+                
+            if isinstance(chat_id, str):
+                chat_id = ObjectId(chat_id)
+                
+            # current length of the history array to target the last element
+            chat = self.chats.find_one({"_id": chat_id}, {"history": 1})
+            if not chat or "history" not in chat:
+                return
+
+            last_index = len(chat["history"]) - 1
+            
+            self.chats.update_one(
+                {"_id": chat_id},
+                {
+                    "$set": {
+                        f"history.{last_index}.ragas_eval": ragas_scores,
+                        f"history.{last_index}.eval_at": datetime.datetime.now(datetime.timezone.utc)
+                    }
+                }
+            )
+            print(f"updated scores for message index {last_index} in chat: {chat_id}")
+        except Exception as e:
+            print(f"Failed to update database: {e}")
 # cache to only create 1 instance of the class
 @st.cache_resource
 def get_db_instance():
