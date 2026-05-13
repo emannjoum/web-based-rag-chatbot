@@ -8,3 +8,6 @@ openai
 dotenv
 ddgs
 pymongo
+ragas
+arabic-reshaper
+python-bidi
