@@ -74,7 +74,7 @@ with st.sidebar:
     else:
         st.caption("No history yet.")
     st.divider()
-    
+
 
 def is_trusted_source(url, allowed_domain="altibbi.com"):
     try:
@@ -82,6 +82,38 @@ def is_trusted_source(url, allowed_domain="altibbi.com"):
         return allowed_domain in netloc
     except Exception:
         return False
+
+def scrape_url_content(url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        page_res = requests.get(url, headers=headers, timeout=5)
+        page_soup = BeautifulSoup(page_res.text, 'html.parser')
+        
+        content_parts = []
+        main_column = page_soup.find(class_='col-lg-9') or page_soup.find('article') or page_soup.body
+        
+        if main_column:
+            for p in main_column.find_all('p'):
+                text = p.get_text(separator=" ", strip=True)
+                if len(text) > 20: 
+                    content_parts.append(text)
+            
+            collapse_sections = main_column.find_all(class_=re.compile("altibbi-collapse|accordion"))
+            for section in collapse_sections:
+                text = section.get_text(separator=" ", strip=True)
+                if len(text) > 20:
+                    content_parts.append(text)
+
+        full_body = "\n\n".join(content_parts)
+        full_body = re.sub(r'[ \t]+', ' ', full_body)
+        full_body = re.sub(r'\n{3,}', '\n\n', full_body)
+        
+        return full_body[:5000]
+    except Exception as e:
+        print(f"Scraping failed for {url}: {e}")
+        return ""
 
 def get_altibbi_context(query): # Tavily Search
     try:
@@ -103,77 +135,11 @@ def get_altibbi_context(query): # Tavily Search
         st.error(f"Tavily Search Error: {e}")
         return "", {}, []
 
-def get_manual_scrape_context(query):
-    try:
-        last_question = f"{query} site:altibbi.com"
-        links = []
-        all_retrieved_urls = []
-        
-        with DDGS() as ddgs:
-            results = ddgs.text(last_question, max_results=5) # Fetch more for filtering
-            if results:
-                for r in results:
-                    all_retrieved_urls.append(r['href'])
-                    if is_trusted_source(r['href']):
-                        links.append(r['href'])
-        
-        if not links:
-            return "No direct results found via manual scrape.", {}, all_retrieved_urls
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        
-        context_text = ""
-        sources_dict = {}
-        
-        for i, url in enumerate(links[:3], start=1):
-            page_res = requests.get(url, headers=headers, timeout=5)
-            page_soup = BeautifulSoup(page_res.text, 'html.parser')
-            
-            content_parts = []
-            
-            main_column = page_soup.find(class_='col-lg-9')
-            if not main_column:
-                main_column = page_soup
-            
-            for p in main_column.find_all('p'):
-                text = p.get_text(separator=" ", strip=True)
-                if len(text) > 20: 
-                    content_parts.append(text)
-                    
-            collapse_sections = main_column.find_all(class_=re.compile("altibbi-collapse|accordion"))
-            for section in collapse_sections:
-                text = section.get_text(separator=" ", strip=True)
-                if len(text) > 20:
-                    content_parts.append(text)
-
-            full_body = "\n\n".join(content_parts)
-            full_body = re.sub(r'[ \t]+', ' ', full_body)
-            full_body = re.sub(r'\n{3,}', '\n\n', full_body)
-            
-            sources_dict[i] = url
-            context_text += f"Source [{i}]\nURL: {url}\nContent: {full_body[:5000]}\n\n"
-            
-        return context_text, sources_dict, all_retrieved_urls
-
-    except Exception as e:
-        st.error(f"Scraping Error: {e}")
-        return "", {}, []
-
 def get_serper_context(query):
     try:
         url = "https://google.serper.dev/search"
-        payload = {
-            "q": f"{query} site:altibbi.com",
-            "gl": "jo", 
-            "hl": "ar", 
-            "num": 10 
-        }
-        headers = {
-            'X-API-KEY': SERPER_API_KEY,
-            'Content-Type': 'application/json'
-        }
+        payload = {"q": f"{query} site:altibbi.com", "gl": "jo", "hl": "ar", "num": 5}
+        headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
         
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
@@ -188,22 +154,49 @@ def get_serper_context(query):
             link = result.get("link")
             all_retrieved_urls.append(link)
             
-            if not is_trusted_source(link):
+            if not is_trusted_source(link) or valid_count > 3:
                 continue 
                 
-            snippet = result.get("snippet", "")
-            sources_dict[valid_count] = link
-            context_text += f"Source [{valid_count}]\nURL: {link}\nContent: {snippet}\n\n"
-            valid_count += 1
+            full_content = scrape_url_content(link)
+            # Fallback to snippet if scraping fails
+            final_content = full_content if len(full_content) > 100 else result.get("snippet", "")
             
-            if valid_count > 3: 
-                break
+            sources_dict[valid_count] = link
+            context_text += f"Source [{valid_count}]\nURL: {link}\nContent: {final_content}\n\n"
+            valid_count += 1
 
         return context_text, sources_dict, all_retrieved_urls
     except Exception as e:
         st.error(f"Serper Search Error: {e}")
         return "", {}, []
 
+def get_manual_scrape_context(query): # DDGS + Scraping
+    try:
+        last_question = f"{query} site:altibbi.com"
+        links = []
+        all_retrieved_urls = []
+        
+        with DDGS() as ddgs:
+            results = ddgs.text(last_question, max_results=5)
+            if results:
+                for r in results:
+                    all_retrieved_urls.append(r['href'])
+                    if is_trusted_source(r['href']):
+                        links.append(r['href'])
+        
+        context_text = ""
+        sources_dict = {}
+        
+        for i, url in enumerate(links[:3], start=1):
+            full_content = scrape_url_content(url)
+            sources_dict[i] = url
+            context_text += f"Source [{i}]\nURL: {url}\nContent: {full_content}\n\n"
+            
+        return context_text, sources_dict, all_retrieved_urls
+    except Exception as e:
+        st.error(f"Manual Scrape Error: {e}")
+        return "", {}, []
+    
 def make_links_clickable(text, sources):
     if not sources: return text
     for sid, link in sources.items():
