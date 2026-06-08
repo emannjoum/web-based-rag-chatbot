@@ -12,101 +12,101 @@ class AltibbiDB:
         uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
         self.client = MongoClient(uri)
         self.db = self.client["altibbi_db"]
-        self.chats = self.db["chat_histories"]
+        self.messages_col = self.db["chat_messages"]
 
-    def log_interaction(self, chat_id, query, response, search_params=None, sources=None, metadata=None):
-        """
-        Saves interaction with structured JSON objects.
-        search_params: dict (e.g., {"query": "...", "filters": [...]})
-        sources: dict or list of dicts
-        metadata: dict (e.g., {"model": "gpt-4", "latency": 1.2})
-        """
-        
+    def log_interaction(self, session_id, query, response, search_params=None, sources=None, metadata=None):
+        if not session_id:
+            session_id = str(ObjectId())
+
         structured_sources = {str(k): v for k, v in sources.items()} if sources else {}
         structured_search = search_params if search_params else {}
         structured_metadata = metadata if metadata else {}
 
         now = datetime.datetime.now(datetime.timezone.utc)
 
-        new_messages = [
-            {
-                "role": "user", 
-                "content": query, 
-                "timestamp": now
-            },
-            {
-                "role": "assistant", 
-                "content": response, 
-                "sources": structured_sources, # nested obj
-                "search_context": structured_search, # nested obj
-                "timestamp": now
-            }
-        ]
+        user_doc = {
+            "session_id": session_id,
+            "role": "user",
+            "timestamp": now,
+            "content": query,
+            "is_delete": 0
+        }
 
-        if chat_id:
-            self.chats.update_one(
-                {"_id": ObjectId(chat_id)},
-                {
-                    "$push": {"history": {"$each": new_messages}},
-                    "$inc": {"summary.interaction_count": 1}
-                    }
-            )
-            return chat_id
-        else:
-            chat_doc = {
-                "timestamp": now,
-                "summary": {
-                    "last_query": query,
-                    "interaction_count": 1
-                },
-                "config": structured_metadata,
-                "history": new_messages
-            }
-            result = self.chats.insert_one(chat_doc)
-            return str(result.inserted_id)
+        model_doc = {
+            "session_id": session_id,
+            "role": "assistant",
+            "timestamp": now,
+            "content": response,
+            "sources": structured_sources,
+            "config": structured_metadata, # language + chat_title
+            "extra": {},
+            "is_delete": 0
+        }
+
+        result = self.messages_col.insert_many([user_doc, model_doc])
+        return session_id, result.inserted_ids[1] # sesh id + unique id of assitant's message
     
     def get_all_history(self, limit=20):
         try:
-            return list(self.chats.find().sort("timestamp", -1).limit(limit))
+            pipeline = [
+                {"$match": {"is_delete": {"$ne": 1}}},
+                {"$sort": {"timestamp": -1}},
+                {
+                    "$group": {
+                        "_id": "$session_id",
+                        "last_active": {"$first": "$timestamp"},
+                        "last_preview": {"$first": "$content"},
+                        "chat_title": {"$max": "$config.chat_title"} 
+                    }
+                },
+                {"$sort": {"last_active": -1}},
+                {"$limit": limit}
+            ]
+            return list(self.messages_col.aggregate(pipeline))
         except Exception as e:
             print(f"Error fetching history: {e}")
             return []
     
-    def get_chat_by_id(self, chat_id):
+    def get_chat_by_id(self, session_id):
         try:
-            return self.chats.find_one({"_id": ObjectId(chat_id)})
+            return list(self.messages_col.find({
+                "session_id": session_id,
+                "is_delete": {"$ne": 1} 
+            }).sort("timestamp", 1))
         except Exception as e:
             print(f"Error fetching specific chat: {e}")
             return None
         
-    def update_eval_scores(self, chat_id, ragas_scores):
+    def update_eval_scores(self, message_id, ragas_scores):
         try:
-            if not chat_id:
-                return
-                
-            if isinstance(chat_id, str):
-                chat_id = ObjectId(chat_id)
-                
-            # current length of the history array to target the last element
-            chat = self.chats.find_one({"_id": chat_id}, {"history": 1})
-            if not chat or "history" not in chat:
+            if not message_id:
                 return
 
-            last_index = len(chat["history"]) - 1
-            
-            self.chats.update_one(
-                {"_id": chat_id},
+            self.messages_col.update_one(
+                {"_id": ObjectId(message_id) if isinstance(message_id, str) else message_id},
                 {
                     "$set": {
-                        f"history.{last_index}.ragas_eval": ragas_scores,
-                        f"history.{last_index}.eval_at": datetime.datetime.now(datetime.timezone.utc)
+                        "ragas_eval": ragas_scores,
+                        "eval_at": datetime.datetime.now(datetime.timezone.utc)
                     }
                 }
             )
-            print(f"updated scores for message index {last_index} in chat: {chat_id}")
+            print(f"Updated evaluation scores for message document: {message_id}")
         except Exception as e:
             print(f"Failed to update database: {e}")
-# cache to only create 1 instance of the class
+
+    def delete_chat(self, session_id):
+        try:
+            result = self.messages_col.update_many(
+                {"session_id": session_id},
+                {"$set": {"is_delete": 1}}
+            )
+            print(f"Soft deleted {result.modified_count} messages for session: {session_id}")
+            return True
+        except Exception as e:
+            print(f"Error deleting chat: {e}")
+            return False
+
 @st.cache_resource
 def get_db_instance():
     return AltibbiDB()
