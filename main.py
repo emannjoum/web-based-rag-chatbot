@@ -11,6 +11,10 @@ import os
 import re
 from database import get_db_instance
 import json
+import threading
+import base64
+from PIL import Image
+import io
 
 from ragas import evaluate
 from ragas.metrics import faithfulness, answer_relevancy
@@ -62,19 +66,37 @@ with st.sidebar:
     
     st.subheader("Recent History")
     history_records = db.get_all_history(limit=15)
+    
     if history_records:
         for chat in history_records:
-            query_text = chat.get("summary", {}).get("last_query", "Empty Chat")
-            chat_label = query_text[:30] + "..."
+            stored_title = chat.get("chat_title")
             
-            if st.button(chat_label, key=str(chat["_id"]), use_container_width=True):
-                st.session_state.messages = chat.get("history", [])
-                st.session_state.current_chat_id = str(chat["_id"])
-                st.rerun()
+            if stored_title:
+                chat_label = stored_title
+            else:
+                query_text = chat.get("last_preview", "Empty Chat")
+                chat_label = query_text[:25] + "..."
+            
+            col1, col2 = st.columns([0.8, 0.15])
+            
+            with col1:
+                if st.button(chat_label, key=f"load_{chat['_id']}", use_container_width=True):
+                    raw_messages = db.get_chat_by_id(str(chat["_id"]))
+                    st.session_state.messages = raw_messages if raw_messages else []
+                    st.session_state.current_chat_id = str(chat["_id"])
+                    st.rerun()
+            
+            with col2:
+                with st.popover("⋮", help="Chat options"):
+                    if st.button("Delete Chat", key=f"del_{chat['_id']}", use_container_width=True, type="primary"):
+                        db.delete_chat(str(chat["_id"]))
+                        
+                        if st.session_state.current_chat_id == str(chat["_id"]):
+                            st.session_state.messages = []
+                            st.session_state.current_chat_id = None
+                        st.rerun()
     else:
         st.caption("No history yet.")
-    st.divider()
-
 
 def is_trusted_source(url, allowed_domain="altibbi.com"):
     try:
@@ -110,7 +132,7 @@ def scrape_url_content(url):
         full_body = re.sub(r'[ \t]+', ' ', full_body)
         full_body = re.sub(r'\n{3,}', '\n\n', full_body)
         
-        return full_body[:5000]
+        return full_body[:9000]
     except Exception as e:
         print(f"Scraping failed for {url}: {e}")
         return ""
@@ -203,42 +225,52 @@ def make_links_clickable(text, sources):
         text = re.sub(rf"\[{sid}\]", f"[[{sid}]]({link})", text)
     return text
 
-def build_system_prompt(context):
+def build_system_prompt(context, language):
+    lang_str = str(language).lower()
+    
+    if "ar" in lang_str:
+        target_lang = "Arabic"
+    elif "en" in lang_str:
+        target_lang = "English"
+    else:
+        target_lang = "the exact same language as the user's input query"
+
     return f"""
-    ROLE: You are the official Altibbi Medical AI Assistant. 
+    ROLE: You are the official, empathetic Altibbi Medical AI Assistant. 
     CONSTRAINTS:
     1. Base your answers on the "Context from Altibbi" provided below AND the previous conversation history ONLY.
-    2. If neither the context nor the conversation history contains the answer, state: "I couldn't find specific information on Altibbi." or " لم أتمكن من العثور على الإجابة من الطبي " instead if in Arabic.
+    2. If neither the context nor the conversation history contains the answer, DO NOT use your own knowledge. Instead, politely explain that you couldn't find the exact information on Altibbi right now, and ask a relevant, empathetic clinical follow-up question to help the user elaborate on their symptoms or condition.
     3. ALWAYS cite facts INLINE immediately after the relevant statement using the source number (e.g., "Paracetamol is used to treat fever [1].").
-    4. If you provide an answer, you MUST cite the source using brackets (e.g., [1]). If you cannot cite a source from the context, do not answer.
+    4. If you provide an answer, you MUST cite the source using brackets (e.g., [1]). If you cannot cite a source from the context, do not answer factually.
     5. DO NOT generate a "Sources", "References", or "Links" list at the end of your response. Only use the inline bracket format.
-    6. Answer in the same language as the input query.
+    6. **CRITICAL: You MUST write your final response entirely in {target_lang}. Do not mix languages.**
     7. Try to structure your response beautifully using Markdown headers (e.g., الأسباب, الأعراض, العلاج) and bullet points for readability.
-    8. Never answer off-topic queries, only answer medical ones that do have an answer in the context from altibbi below. Do not use your own knowledge.
+    8. Never answer off-topic queries, only answer medical ones.
 
     CONTEXT FROM ALTIBBI FOR CURRENT QUESTION:
+    Content that you should answer from:
     {clean_altibbi_text(context)}
     """
 
 def refine_query(user_query, chat_history, model_choice):
-    if not chat_history:
-        return user_query
-
-    history_str = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history[-3:]]) 
-
+    # Pass history if available, otherwise note that there is no history
+    history_str = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history[-3:]]) if chat_history else "No previous history."
+    
     refine_prompt = f"""
-    Given the conversation history and the last question, rephrase the new question into a standalone
-    Arabic medical search query that can be understood without the previous context.
+    Given the conversation history (if any) and the last question, perform two tasks:
+    1. Rephrase the new question into a standalone Arabic medical search query (for Altibbi database searching).
+    2. Detect the exact language of the ORIGINAL NEW QUESTION (not the refined one).
 
     Example:
-    Message 1: ما هو البانادول؟ 
-    Message 2: هل له أعراض جانبية؟ 
+    Message 1: What is Panadol? 
+    Message 2: Does it have side effects? 
     Refined Query: هل للبنادول أعراض جانبية؟ 
+    Language: en
 
     Instructions:
     - Incorporate necessary context from the history into the new question.
-    - Maintain a professional medical tone in Arabic.
-    - RETURN ONLY JSON.
+    - Maintain a professional medical tone in Arabic for the refined_query.
+    - RETURN ONLY JSON. NO MARKDOWN. NO EXTRA TEXT.
 
     HISTORY:
     {history_str}
@@ -247,23 +279,24 @@ def refine_query(user_query, chat_history, model_choice):
 
     RETURN ONLY JSON:
     {{
-        "refined_query": "standalone query here"
+        "refined_query": "standalone arabic query here",
+        "language": "en or ar or other (based on the NEW QUESTION)",
+        "chat_title": "short chat title in the original language"
     }}
     """
 
-    try:
-        if model_choice == "GPT-4o mini":
+    if model_choice == "GPT-4o mini":
             response = client_openai.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are a specialized medical query refiner. Output JSON only."},
+                    {"role": "system", "content": "You are a specialized medical query refiner. Output valid JSON only."},
                     {"role": "user", "content": refine_prompt}
                 ],
                 temperature=0,
                 response_format={ "type": "json_object" }
             )
             content = response.choices[0].message.content
-        else:
+    else:
             model = genai.GenerativeModel("gemini-2.5-flash-lite") 
             response = model.generate_content(
                 refine_prompt,
@@ -271,28 +304,88 @@ def refine_query(user_query, chat_history, model_choice):
             )
             content = response.text
 
-        # parsing 
-        try:
-            parsed_json = json.loads(content)
-        except json.JSONDecodeError:
+    # JSON Parsing 
+    try:
+            content = content.strip()
+            if content.startswith("```json"):  # Strip markdown formatting if the model hallucinates it
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+                
+            parsed_json = json.loads(content.strip())
+            
+    except json.JSONDecodeError:
             match = re.search(r"\{.*?\}", content, re.DOTALL)
             if match:
                 parsed_json = json.loads(match.group())
             else:
-                raise ValueError("No JSON found in response")
+                parsed_json = {
+                    "refined_query": user_query,
+                    "language": "ar", 
+                    "chat_title": user_query[:30]
+                }
 
-        return parsed_json.get("refined_query", user_query)
+    print("\nExtracted JSON (Query Refiner)")
+    print(json.dumps(parsed_json, indent=2, ensure_ascii=False))
 
+    return {
+        "chat_title": parsed_json.get("chat_title", user_query[:30]),
+        "refined_query": parsed_json.get("refined_query", user_query),
+        "language": parsed_json.get("language", "ar")
+    }
+
+def generate_dynamic_fallback(user_query, language, model_choice):
+    target_lang = "Arabic" if "ar" in str(language).lower() else "English"
+    
+    fallback_prompt = f"""
+    ROLE: You are an empathetic, welcoming official Altibbi Medical AI Assistant.
+    SITUATION: The system searched the Altibbi database for the user's query but found no direct articles or matching content.
+    
+    TASK:
+    Write a brief, highly engaging response to the user in {target_lang}.
+    1. Validate and acknowledge their specific topic or health concern naturally (do not use generic boilerplate).
+    2. Gently explain that you couldn't find a direct document on Altibbi for this exact phrase right now.
+    3. Ask a highly relevant, conversational clinical follow-up question (e.g., about accompanying symptoms, duration, context, or specific goals) to pull the user into a deeper conversation and help them rephrase or expand.
+    4. Keep the tone warm, professional, supportive, and completely free of technical jargon.
+    
+    CRITICAL: Respond ONLY in {target_lang}. Do not mix languages.
+    
+    USER'S QUERY: {user_query}
+    """
+
+    try:
+        if model_choice == "GPT-4o mini":
+            response = client_openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an engaging medical AI assistant specializing in conversational guidance."},
+                    {"role": "user", "content": fallback_prompt}
+                ],
+                temperature=0.6 
+            )
+            return response.choices[0].message.content
+        else:
+            model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            response = model.generate_content(
+                fallback_prompt,
+                generation_config={"temperature": 0.6}
+            )
+            return response.text
     except Exception as e:
-        print(f"Refinement failed: {e}")
-        return user_query 
+        if "ar" in str(language).lower():
+            return f"لم أتمكن من العثور على معلومات محددة حول '{user_query}' في الطبي حالياً. هل يمكنك إخباري بالمزيد من التفاصيل أو الأعراض المرافقة لمساعدتك بشكل أفضل؟"
+        return f"I couldn't find matching articles for '{user_query}' right now. Could you share more details or symptoms so I can better assist you?"
+    
     
 def clean_altibbi_text(text):
     noise_phrases = [
         "share on whatsapp", "copy to clipboard","shear on whatsapp" ,"sina-logo", 
         "نقبل تأمين التعاونية", "اسأل، استفسر، واطمئن", "icon",
         "المشاركة عبر وسائل التواصل الاجتماعي", "سجّل دخولك للاستفادة",
-        "احصل على استشاره مجانيه", "0 تعليق"
+        "احصل على استشاره مجانيه", "0 تعليق", "آخر مقاطع الفيديو من أطباء متخصصين", 
+        "محتوى طبي موثوق من أطباء وفريق الطبي", "يمكنك الآن ارسال تعليق على سؤال المريض واستفساره"
     ]
     
     cleaned_text = text
@@ -344,8 +437,7 @@ def evaluate_with_ragas(query, response, context):
     try:
         eval_llm = ChatOpenAI(model="gpt-4o-mini", api_key=OPENAI_API_KEY)
 
-        # Ragas expects a dataset format
-        data_sample = {
+        data_sample = { # for Ragas 
             "question": [query],
             "answer": [response],
             "contexts": [[context]] 
@@ -362,38 +454,6 @@ def evaluate_with_ragas(query, response, context):
         print(f"Ragas Error: {e}")
         return {"faithfulness": 0.0, "answer_relevancy": 0.0}
 
-def evaluate_response_manual(query, response, context):
-    eval_prompt = f"""
-    You are a medical quality assurance auditor. Evaluate the following medical AI response based on the provided Altibbi context.
-    
-    CRITERIA:
-    1. Faithfulness: Is the answer derived ONLY from the context? (0-5)
-    2. Relevance: Does it directly answer the user's query? (0-5)
-    3. Citation Accuracy: Are the [n] brackets placed correctly next to facts? (0-5)
-
-    USER QUERY: {query}
-    CONTEXT: {context}
-    AI RESPONSE: {response}
-
-    RETURN ONLY JSON:
-    {{
-        "faithfulness": score,
-        "relevance": score,
-        "citations": score,
-        "feedback": "short critique"
-    }}
-    """
-    res = client_openai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "system", "content": "You are a medical auditor. Output JSON."},
-                          {"role": "user", "content": eval_prompt}],
-                temperature=0,
-                response_format={"type": "json_object"}
-            )
-    return json.loads(res.choices[0].message.content)
-
-import threading
-
 def process_eval_async(db_instance, chat_id, query, response, context):
     try:
         scores = evaluate_with_ragas(query, response, context)
@@ -401,19 +461,151 @@ def process_eval_async(db_instance, chat_id, query, response, context):
     except Exception as e:
         print(f"Async Eval Error: {e}")
 
+def encode_image(image_bytes):
+    return base64.b64encode(image_bytes).decode('utf-8')
+
+def classify_uploaded_image(image_bytes, model_choice): # into [report, drug, unsupported]
+    prompt = "Look at this image. Classify it strictly as exactly one of these three words: " \
+    "'report' (if it is a medical lab test, medical chart, diagnostic report)," \
+    "'drug' (if it is a medicine box, pill pack, prescription medication), " \
+    "or 'unsupported' (if it is a picture of a person, animal, random object, or anything else). Reply ONLY with the single word."
+    
+    try:
+        if model_choice == "GPT-4o mini":
+            base64_img = encode_image(image_bytes)
+            response = client_openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+                        ]
+                    }
+                ],
+                temperature=0
+            )
+            return response.choices[0].message.content.strip().lower()
+        else:
+            img = Image.open(io.BytesIO(image_bytes))
+            model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            response = model.generate_content([prompt, img], generation_config={"temperature": 0})
+            return response.text.strip().lower()
+    except Exception as e:
+        print(f"Classification Error: {e}")
+        return "unsupported"
+
+def analyze_image_with_prompt(image_bytes, image_type, model_choice):
+    if image_type == "report":
+        prompt = "You are an expert medical AI assistant. Analyze this medical report/lab test. " \
+        "Extract the key findings, explain what they indicate in simple, understandable terms, " \
+        "and explicitly flag any abnormal values according to standard medical reference ranges. " \
+        "Format your response beautifully using Markdown bullet points."
+    elif image_type == "drug":
+        prompt = "You are an expert medical AI assistant. Identify this medication from the image." \
+        " Provide its common uses, active ingredients, standard dosage guidelines, and potential side effects." \
+        " Format your response beautifully using Markdown bullet points."
+    
+    try:
+        if model_choice == "GPT-4o mini":
+            base64_img = encode_image(image_bytes)
+            response = client_openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+                        ]
+                    }
+                ],
+                temperature=0.2
+            )
+            return response.choices[0].message.content
+        else:
+            img = Image.open(io.BytesIO(image_bytes))
+            model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            response = model.generate_content([prompt, img], generation_config={"temperature": 0.2})
+            return response.text
+    except Exception as e:
+        return f"حدث خطأ أثناء تحليل الصورة: {e}"
+
 st.title("Altibbi Chatbot")
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(make_links_clickable(message["content"], message.get("sources", {})))
 
+st.markdown("### Upload Image")
+uploaded_file = st.file_uploader("Upload a Medical Report or Drug (PNG/JPG only)", type=["png", "jpg", "jpeg"])
+
+if uploaded_file:
+    if st.button("Analyze Image"):
+        image_bytes = uploaded_file.getvalue()
+        
+        user_msg = f"[Uploaded an Image: {uploaded_file.name}]"
+        st.session_state.messages.append({"role": "user", "content": user_msg})
+        
+        with st.chat_message("user"):
+            st.markdown(user_msg)
+            
+        with st.spinner("Classifying image type..."):
+            image_type = classify_uploaded_image(image_bytes, selected_model)
+        
+        if "unsupported" in image_type or image_type not in ["report", "drug"]:
+            static_reply = "هذا النوع من الصور غير مدعوم. يرجى رفع صورة لتقرير طبي (تحاليل طبية) أو دواء."
+            st.session_state.messages.append({"role": "assistant", "content": static_reply, "sources": {}})
+            
+            with st.chat_message("assistant"):
+                st.markdown(static_reply)
+                
+            # Log unsupported image attempt
+            db.log_interaction(
+                session_id=st.session_state.current_chat_id,
+                query=user_msg,
+                response=static_reply,
+                metadata={"model": selected_model, "content_type": "unsupported", "chat_title": "Image Upload"}
+            )
+        else:
+            # Process supported image based on type
+            with st.spinner(f"Analyzing {image_type} image..."):
+                analysis_reply = analyze_image_with_prompt(image_bytes, image_type, selected_model)
+                
+            st.session_state.messages.append({"role": "assistant", "content": analysis_reply, "sources": {}})
+            
+            with st.chat_message("assistant"):
+                st.markdown(analysis_reply)
+                
+            # Log the successful analysis to database with required content_type tag
+            new_id, _ = db.log_interaction(
+                session_id=st.session_state.current_chat_id,
+                query=user_msg,
+                response=analysis_reply,
+                metadata={
+                    "model": selected_model, 
+                    "content_type": image_type, 
+                    "chat_title": f"{image_type.capitalize()} Analysis"
+                }
+            )
+            
+            if st.session_state.current_chat_id is None:
+                st.session_state.current_chat_id = new_id
+
+        st.rerun()
+
+st.divider()
+
 if user_query := st.chat_input("Ask Altibbi..."):
-    # Display user message and update state
     st.chat_message("user").markdown(user_query)
     st.session_state.messages.append({"role": "user", "content": user_query})
     
     with st.spinner("Searching Altibbi..."):
-        last_question = refine_query(user_query, st.session_state.messages[:-1], selected_model)
+        refine_result = refine_query(user_query, st.session_state.messages[:-1], selected_model)
+        last_question = refine_result["refined_query"]
+        chat_title = refine_result["chat_title"]
+        detected_lang = refine_result["language"]
         
         if search_method == "Serper":
             new_context, new_sources, raw_urls = get_serper_context(last_question)
@@ -422,14 +614,41 @@ if user_query := st.chat_input("Ask Altibbi..."):
         else:
             new_context, new_sources, raw_urls = get_manual_scrape_context(last_question)
 
-    if not new_sources: # if empty search results
-        fallback_msg = "لم أتمكن من العثور على معلومات محددة في الطبي حول هذا الموضوع."
-        st.chat_message("assistant").markdown(fallback_msg)
-        st.session_state.messages.append({"role": "assistant", "content": fallback_msg, "sources": {}})
+    if not new_sources: 
+        with st.spinner("Refining guidance..."):
+            fallback_msg = generate_dynamic_fallback(user_query, detected_lang, selected_model)
+            
+        with st.chat_message("assistant"):
+            st.markdown(fallback_msg)
+            
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": fallback_msg, 
+            "sources": {}
+        })
+        
+        new_id, _ = db.log_interaction(
+            session_id=st.session_state.current_chat_id,
+            query=user_query,
+            response=fallback_msg,
+            search_params={"query": last_question}, 
+            sources={}, 
+            metadata={
+                "model": selected_model, 
+                "method": search_method, 
+                "chat_title": chat_title, 
+                "language": detected_lang,
+                "status": "dynamic_fallback"
+            }
+        )
+        
+        if st.session_state.current_chat_id is None:
+            st.session_state.current_chat_id = new_id
+            
         st.rerun()
-
+         
     with st.spinner("Consulting Altibbi AI..."):
-        sys_prompt = build_system_prompt(new_context)
+        sys_prompt = build_system_prompt(new_context, language=detected_lang)
         try:
             if selected_model == "GPT-4o mini":
                 msgs = [{"role": "system", "content": sys_prompt}] + \
@@ -448,7 +667,7 @@ if user_query := st.chat_input("Ask Altibbi..."):
                 chat = model.start_chat(history=history)
                 ai_reply = chat.send_message(user_query).text
 
-            cited_ids = set(re.findall(r"\[(\d+)\]", ai_reply)) # pasrsing for ui 
+            cited_ids = set(re.findall(r"\[(\d+)\]", ai_reply)) 
             used_sources = {k: v for k, v in new_sources.items() if str(k) in cited_ids}
 
             with st.chat_message("assistant"):
@@ -464,25 +683,36 @@ if user_query := st.chat_input("Ask Altibbi..."):
                 "sources": used_sources 
             })
 
-            new_id = db.log_interaction(
-                chat_id=st.session_state.current_chat_id,
+            # Unpack the session ID string and the distinct assistant target message Object ID
+            new_id, assistant_msg_id = db.log_interaction(
+                session_id=st.session_state.current_chat_id,
                 query=user_query,
                 response=ai_reply,
                 search_params={"query": last_question}, 
                 sources=used_sources, 
-                metadata={"model": selected_model, "method": search_method}
+                metadata={
+                    "model": selected_model, 
+                    "method": search_method, 
+                    "chat_title": chat_title, 
+                    "language": detected_lang
+                }
             )
             
-            if not st.session_state.current_chat_id:
+            is_new_chat = st.session_state.current_chat_id is None
+            if is_new_chat:
                 st.session_state.current_chat_id = new_id
 
-            eval_thread = threading.Thread( # in bg
+            # Pass the assistant_msg_id down to prevent evaluation score race conditions
+            eval_thread = threading.Thread(
                 target=process_eval_async,
-                args=(db, st.session_state.current_chat_id, user_query, ai_reply, new_context)
+                args=(db, assistant_msg_id, user_query, ai_reply, new_context)
             )
             eval_thread.start()
 
             log_to_file_and_terminal(user_query, last_question, raw_urls, new_sources, new_context, ai_reply)
+            
+            if is_new_chat:
+                st.rerun()
 
         except Exception as e:
             st.error(f"AI Generation Error: {e}")
