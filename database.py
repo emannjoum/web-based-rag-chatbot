@@ -68,14 +68,10 @@ class AltibbiDB:
             return []
     
     def get_chat_by_id(self, session_id):
-        try:
             return list(self.messages_col.find({
                 "session_id": session_id,
                 "is_delete": {"$ne": 1} 
             }).sort("timestamp", 1))
-        except Exception as e:
-            print(f"Error fetching specific chat: {e}")
-            return None
         
     def update_eval_scores(self, message_id, ragas_scores):
         try:
@@ -96,16 +92,12 @@ class AltibbiDB:
             print(f"Failed to update database: {e}")
 
     def delete_chat(self, session_id):
-        try:
             result = self.messages_col.update_many(
                 {"session_id": session_id},
                 {"$set": {"is_delete": 1}}
             )
-            print(f"Soft deleted {result.modified_count} messages for session: {session_id}")
+            print(f"Deleted {result.modified_count} messages for session: {session_id}")
             return True
-        except Exception as e:
-            print(f"Error deleting chat: {e}")
-            return False
 
 @st.cache_resource
 def get_db_instance():
