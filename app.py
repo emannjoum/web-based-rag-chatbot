@@ -2,7 +2,7 @@ import re
 import streamlit as st
 from database import get_db_instance
 from utils import fix_arabic_for_terminal, make_links_clickable, log_to_file_and_terminal
-from prompts import build_system_prompt
+from prompts import build_system_prompt, get_drug_prompt
 from search_service import get_altibbi_context, get_serper_context, get_manual_scrape_context
 
 from llm_service import (
@@ -11,6 +11,14 @@ from llm_service import (
     generate_follow_ups
 )
 from eval_service import trigger_eval
+import logging
+
+logging.basicConfig(
+    level=logging.INFO, 
+    format="\n%(asctime)s | [%(levelname)s] | %(message)s",
+    datefmt="%H:%main:%S"
+)
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Altibbi Chatbot", layout="wide")
 db = get_db_instance()
@@ -45,31 +53,6 @@ with st.sidebar:
                     st.session_state.messages, st.session_state.current_chat_id = [], None
                 st.rerun()
 
-for idx, message in enumerate(st.session_state.messages):
-    with st.chat_message(message["role"]):
-        st.markdown(make_links_clickable(message["content"], message.get("sources", {})))
-        
-        # New: Append sources to the end of the message if they exist
-        sources = message.get("sources", {})
-        if sources:
-            st.markdown("---")
-            st.caption("Sources")
-            for sid, link in sources.items():
-                st.markdown(f"- [{sid}] {link}")
-        
-        # FIX: Use a more robust unique key based on message content hash or a counter
-        if message["role"] == "assistant" and message.get("suggestions"):
-            # We use the length of the message to ensure it only renders for the last one
-            # and use a hash of the query/response for the key
-            suggestions = message.get("suggestions")
-            cols = st.columns(len(suggestions))
-            for i, sugg in enumerate(suggestions):
-                # Using a hash of the suggestion text + index to guarantee uniqueness
-                unique_key = f"sugg_{hash(sugg + str(i))}" 
-                if cols[i].button(sugg, key=unique_key, use_container_width=True):
-                    st.session_state.pending_action = sugg
-                    st.rerun()
-
 def execute_rag_pipeline(actual_query, selected_model, search_method):
     with st.spinner("Searching Altibbi..."):
         refine_result = refine_query(actual_query, st.session_state.messages, selected_model)
@@ -77,7 +60,7 @@ def execute_rag_pipeline(actual_query, selected_model, search_method):
         
         search_funcs = {"Serper": get_serper_context, "Tavily": get_altibbi_context, "Manual Scraping": get_manual_scrape_context}
         new_context, new_sources, raw_urls = search_funcs.get(search_method, get_serper_context)(lq)
-    
+
     if not new_sources: 
         with st.spinner("Refining guidance..."): fallback_msg = generate_dynamic_fallback(actual_query, lang, selected_model)
         st.session_state.messages.append({"role": "assistant", "content": fallback_msg, "sources": {}})
@@ -96,8 +79,9 @@ def execute_rag_pipeline(actual_query, selected_model, search_method):
         prompt = f"Please provide medical information about: {actual_query}"
         
         # Inject OCR context if previous message was drug identification
-        if st.session_state.messages and "تم التعرف على الدواء" in st.session_state.messages[-1]["content"]:
-            prompt = f"{st.session_state.messages[-1]['content']}\n\n{prompt}"
+        if st.session_state.get("is_ocr_query"):
+            prompt = get_drug_prompt(actual_query, lang)
+            st.session_state.is_ocr_query = False
             
         ai_reply = call_text_model(prompt, selected_model, system_prompt=sys_prompt, history=st.session_state.messages)
         used_sources = {k: v for k, v in new_sources.items() if str(k) in set(re.findall(r"\[(\d+)\]", ai_reply))}
@@ -132,22 +116,29 @@ st.title("Altibbi Chatbot")
 
 for idx, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
+        # Render the main message content
         st.markdown(make_links_clickable(message["content"], message.get("sources", {})))
         
+        # Render sources if they exist
+        sources = message.get("sources", {})
+        if sources:
+            with st.expander("Sources", expanded=False):
+                for sid, link in sources.items():
+                    st.markdown(f"- [{sid}] {link}")
+            
         # Render Suggestions Bubbles ONLY under the very last assistant message
         if message["role"] == "assistant" and idx == len(st.session_state.messages) - 1 and message.get("suggestions"):            
-            # Using columns to create horizontal buttons representing bubbles
             cols = st.columns(len(message["suggestions"]))
             for i, sugg in enumerate(message["suggestions"]):
-                # If clicked, we set a "pending action" to be processed below
-                if cols[i].button(sugg, key=f"sugg_btn_{idx}_{i}", use_container_width=True):
+                # Unique key based on index and suggestion text
+                unique_key = f"sugg_btn_{idx}_{hash(sugg + str(i))}"
+                if cols[i].button(sugg, key=unique_key, use_container_width=True):
                     st.session_state.pending_action = sugg
                     st.rerun()
 
-# Handling Input
 user_input = st.chat_input("Ask Altibbi... ", accept_file=True, file_type=["png", "jpg", "jpeg"])
 
-# Check if a suggestion button was clicked
+# if a suggestion button was clicked
 if "pending_action" in st.session_state and st.session_state.pending_action:
     simulated_query = st.session_state.pending_action
     st.session_state.pending_action = None # Clear it immediately
@@ -166,9 +157,10 @@ elif user_input:
         st.chat_message("user").markdown(user_msg)
             
         with st.spinner("Classifying image type..."): img_type = classify_uploaded_image(img_bytes, selected_model)
+        logger.info(f"Vision Layer Detected Type: {img_type}")
         
         if img_type not in ["report", "drug"]:
-            reply = "هذا النوع من الصور غير مدعوم. يرجى رفع صورة لتقرير طبي (تحاليل طبية) أو دواء."
+            reply = "هذا النوع من الصور غير مدعوم. يرجى رفع صورة لتحاليل طبية أو دواء."
             st.session_state.messages.append({"role": "assistant", "content": reply, "sources": {}})
             st.chat_message("assistant").markdown(reply)
             db.log_interaction(st.session_state.current_chat_id, user_msg, reply, metadata={"model": selected_model, "content_type": "unsupported"})
@@ -184,7 +176,8 @@ elif user_input:
 
         elif img_type == "drug":
             with st.spinner("Extracting medication..."): drug_name = extract_drug_name_from_image(img_bytes, selected_model)
-            st.session_state.messages.append({"role": "assistant", "content": f"**تم التعرف على الدواء:** {drug_name}", "sources": {}})
+            logger.info("Extracted Drug Name: '{drug_name}'")
+            st.session_state.is_ocr_query = True
             execute_rag_pipeline(drug_name, selected_model, search_method)
 
     elif user_input.text:

@@ -5,7 +5,14 @@ from PIL import Image
 from config import client_openai, genai
 import google.generativeai as google_genai
 from utils import encode_image
-from prompts import get_refine_prompt, get_fallback_prompt
+from prompts import (
+    get_refine_prompt, 
+    get_fallback_prompt, 
+    get_image_classification_prompt,
+    get_report_analysis_prompt,
+    get_drug_extraction_prompt,
+    get_follow_ups_prompt
+)
 
 def call_text_model(prompt, model_choice, is_json=False, temperature=0.0, system_prompt=None, history=None):
     if model_choice == "GPT-4o mini":
@@ -20,7 +27,6 @@ def call_text_model(prompt, model_choice, is_json=False, temperature=0.0, system
         res = client_openai.chat.completions.create(model="gpt-4o-mini", messages=messages, **kwargs)
         return res.choices[0].message.content
     else:
-        # Gemini logic
         gemini_history = []
         if history:
             for m in history:
@@ -87,34 +93,19 @@ def refine_query(user_query, chat_history, model_choice):
         "refined_query": parsed_json.get("refined_query", user_query),
         "language": parsed_json.get("language", "ar")
     }
-
         
     #return parsed_json
 
 def generate_dynamic_fallback(user_query, language, model_choice):
     target_lang = "Arabic" if "ar" in str(language).lower() else "English"
-    prompt = get_fallback_prompt(user_query, target_lang)
-    system_instruction = f"""
-    ROLE: You are an empathetic, welcoming official Altibbi Medical AI Assistant.
-    SITUATION: The system searched the Altibbi database for the user's query but found no direct articles or matching content.
-    
-    TASK:
-    Write a brief, highly engaging response to the user in {target_lang}.
-    1. Validate and acknowledge their specific topic or health concern naturally (do not use generic boilerplate).
-    2. Gently explain that you couldn't find a direct document on Altibbi for this exact phrase right now.
-    3. Ask a highly relevant, conversational clinical follow-up question (e.g., about accompanying symptoms, duration, context, or specific goals) to pull the user into a deeper conversation and help them rephrase or expand.
-    4. Keep the tone warm, professional, supportive, and completely free of technical jargon.
-    
-    CRITICAL: Respond ONLY in {target_lang}. Do not mix languages.
-    
-    USER'S QUERY: {user_query}
-    """
+    sys_prompt = get_fallback_prompt(target_lang)
+    user_prompt = f"USER'S QUERY: {user_query}"
     try:
         return call_text_model(
-            prompt, 
-            model_choice, 
+            prompt=user_prompt, 
+            model_choice=model_choice, 
             temperature=0.6, 
-            system_prompt=system_instruction
+            system_prompt=sys_prompt
         )
     except Exception:
         if "ar" in target_lang:
@@ -122,8 +113,7 @@ def generate_dynamic_fallback(user_query, language, model_choice):
         return f"I couldn't find matching articles for '{user_query}' right now. Could you share more details or symptoms so I can better assist you?"
 
 def classify_uploaded_image(image_bytes, model_choice):
-    prompt = "Look at this image. Classify it strictly as exactly one of these three words:" \
-    " 'report', 'drug', or 'unsupported'. Reply ONLY with the single word."
+    prompt = get_image_classification_prompt()
     try:
         return call_vision_model(prompt, image_bytes, model_choice).strip().lower()
     except Exception as e: 
@@ -131,37 +121,21 @@ def classify_uploaded_image(image_bytes, model_choice):
         return "unsupported"
 
 def analyze_image_with_prompt(image_bytes, image_type, model_choice):
-    prompt = "You are an expert medical AI assistant. Analyze this medical report/lab test. " \
-    "Extract key findings, explain them simply, and explicitly flag abnormal values in Markdown bullet points."
+    prompt = get_report_analysis_prompt()
+    
     return call_vision_model(prompt, image_bytes, model_choice, temperature=0.2)
 
 def extract_drug_name_from_image(image_bytes, model_choice):
-    prompt = "You are a highly accurate OCR system. Read the text on this medication packaging. " \
-    "Return ONLY the primary brand name of the medication or its active ingredient. " \
-    "Do not include any conversational text, explanations, or extra punctuation."
+    prompt = get_drug_extraction_prompt()
     try:
         return call_vision_model(prompt, image_bytes, model_choice).strip()
     except Exception as e: 
         print(f"Extraction Error: {e}")
         return "Unknown Medication"
 
-
 def generate_follow_ups(user_query, ai_response, language, model_choice):
     target_lang = "Arabic" if "ar" in str(language).lower() else "English"
-    prompt = f"""
-    Based on the user's query and the AI's response, generate exactly 3 short, 
-    engaging follow-up questions the user might logically want to ask next.
-    Keep them very concise (under 7 words each).
-    Language: {target_lang}
-    
-    USER QUERY: {user_query}
-    AI RESPONSE: {ai_response}
-    
-    RETURN ONLY A VALID JSON OBJECT WITH A SINGLE KEY "suggestions" CONTAINING A LIST OF STRINGS. Example:
-    {{
-        "suggestions": ["Question 1?", "Question 2?", "Question 3?"]
-    }}
-    """
+    prompt = get_follow_ups_prompt(user_query, ai_response, target_lang)
     
     try:
         content = call_text_model(prompt, model_choice, is_json=True, temperature=0.6)
@@ -169,7 +143,7 @@ def generate_follow_ups(user_query, ai_response, language, model_choice):
         content = content.replace(fence + "json", "").replace(fence, "").strip()
         parsed_data = json.loads(content)
         
-        # Extract the array from the "suggestions" key
+        # extract array from the suggestions key
         suggestions = parsed_data.get("suggestions", [])
         
         if isinstance(suggestions, list):
