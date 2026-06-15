@@ -139,7 +139,7 @@ def generate_follow_ups(user_query, ai_response, language, model_choice):
     
     try:
         content = call_text_model(prompt, model_choice, is_json=True, temperature=0.6)
-        fence = "`" * 3
+        fence = "```"
         content = content.replace(fence + "json", "").replace(fence, "").strip()
         parsed_data = json.loads(content)
         

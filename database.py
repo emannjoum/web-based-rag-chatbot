@@ -101,4 +101,4 @@ class AltibbiDB:
 
 @st.cache_resource
 def get_db_instance():
-    return AltibbiDB()
+    return AltibbiDB()  

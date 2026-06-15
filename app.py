@@ -141,7 +141,7 @@ user_input = st.chat_input("Ask Altibbi... ", accept_file=True, file_type=["png"
 # if a suggestion button was clicked
 if "pending_action" in st.session_state and st.session_state.pending_action:
     simulated_query = st.session_state.pending_action
-    st.session_state.pending_action = None # Clear it immediately
+    st.session_state.pending_action = None  
     
     st.chat_message("user").markdown(simulated_query)
     st.session_state.messages.append({"role": "user", "content": simulated_query})

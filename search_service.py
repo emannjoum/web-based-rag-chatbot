@@ -63,7 +63,7 @@ def get_altibbi_context(query):
             query=query, 
             search_depth="advanced", 
             include_domains=["altibbi.com"], 
-            max_results=5,
+            max_results=3,
             include_raw_content=True 
         )
         context_text = ""
@@ -81,12 +81,6 @@ def get_altibbi_context(query):
         st.error(f"Tavily Search Error: {e}")
         return "", {}, []
 
-def is_trusted_source(url, allowed_domain="altibbi.com"):
-    try:
-        return allowed_domain in urlparse(url).netloc.lower()
-    except Exception:
-        return False
-
 def scrape_url_with_serper(url):
     try:
         scrape_url = "https://google.serper.dev/scrape"
@@ -102,12 +96,10 @@ def scrape_url_with_serper(url):
         print(f"Serper scraping failed for {url}: {e}")
         return ""
 
-def process_discovered_links(links, organic_results_map=None):
-    """Helper to take any list of URLs, scrape them, and format the LLM context"""
+def process_discovered_links(links, organic_results_map=None): # take list of URLs, scrape + format the LLM context
     context_text, sources_dict = "", {}
     valid_count = 1
     
-    # Ensure map exists to fall back on snippets if scraping hits a rare issue
     organic_results_map = organic_results_map or {}
 
     for link in links:
@@ -115,9 +107,8 @@ def process_discovered_links(links, organic_results_map=None):
             continue 
             
         full_content = scrape_url_with_serper(link)
-        # Fall back to search snippet only if the scraper returns absolutely nothing
-        final_content = full_content if len(full_content) > 100 else organic_results_map.get(link, "")
-        
+        final_content = full_content if len(full_content) > 100 else organic_results_map.get(link, "")# usesearch snippet only if the scraper returns nothing
+
         sources_dict[valid_count] = link
         context_text += f"Source [{valid_count}]\nURL: {link}\nContent: {final_content}\n\n"
         valid_count += 1
@@ -127,7 +118,7 @@ def process_discovered_links(links, organic_results_map=None):
 def get_serper_context(query):
     try:
         url = "https://google.serper.dev/search"
-        payload = {"q": f"{query} site:altibbi.com", "gl": "jo", "hl": "ar", "num": 5}
+        payload = {"q": f"{query} site:altibbi.com", "gl": "jo", "hl": "ar", "num": 3}
         headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
         
         response = requests.post(url, headers=headers, json=payload)
@@ -155,7 +146,7 @@ def get_manual_scrape_context(query): # using ddgs but with serper's scraper
         all_retrieved_urls = []
         
         with DDGS() as ddgs:
-            results = ddgs.text(target_query, max_results=5)
+            results = ddgs.text(target_query, max_results=3)
             if results:
                 all_retrieved_urls = [r['href'] for r in results]
         
