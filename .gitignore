@@ -3,3 +3,4 @@ scraping.py
 scraped_classes.txt
 __pycache__
 *.txt
+codebase_refactoring.md
