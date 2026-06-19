@@ -1,19 +1,11 @@
-from typing import Any
-
-import streamlit as st
+from chatbot.presentation.streamlit.components.quick_actions import QuickActionsComponent
 
 
 class SuggestionsComponent:
-    def render_for_message(self, message: dict[str, Any], index: int, total_messages: int) -> None:
-        if message["role"] != "assistant" or index != total_messages - 1:
-            return
-        suggestions = message.get("suggestions")
-        if not suggestions:
-            return
+    """Backward-compatible alias that delegates to QuickActionsComponent."""
 
-        cols = st.columns(len(suggestions))
-        for suggestion_index, suggestion in enumerate(suggestions):
-            unique_key = f"sugg_btn_{index}_{hash(suggestion + str(suggestion_index))}"
-            if cols[suggestion_index].button(suggestion, key=unique_key, use_container_width=True):
-                st.session_state.pending_action = suggestion
-                st.rerun()
+    def __init__(self) -> None:
+        self._quick_actions = QuickActionsComponent()
+
+    def render_for_message(self, message, index: int, total_messages: int) -> None:
+        self._quick_actions.render_for_message(message, index, total_messages)

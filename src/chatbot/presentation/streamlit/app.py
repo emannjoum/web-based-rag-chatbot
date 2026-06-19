@@ -12,17 +12,22 @@ from chatbot.application.chat_service import ChatService
 from chatbot.application.dependencies import DependencyContainer
 from chatbot.domain.exceptions import SearchError
 from chatbot.presentation.streamlit.components.chat_view import ChatViewComponent
+from chatbot.presentation.streamlit.components.citation_pane import CitationPaneComponent
 from chatbot.presentation.streamlit.components.sidebar import SidebarComponent
 from chatbot.presentation.streamlit.session import SessionManager
+from chatbot.presentation.streamlit.theme import ClinicalTerminalTheme
 
 
-class StreamlitApp:
+class StreamlitChatApp:
+    """Three-column clinical terminal orchestrator for the Altibbi RAG chatbot."""
+
     def __init__(self, container: DependencyContainer | None = None) -> None:
         self._container = container or DependencyContainer.default()
         self._chat_service = ChatService(self._container)
         self._repository = SessionManager.get_repository()
         self._sidebar = SidebarComponent(self._repository)
         self._chat_view = ChatViewComponent()
+        self._citation_pane = CitationPaneComponent()
         self._logger = logging.getLogger(__name__)
 
     def run(self) -> None:
@@ -32,11 +37,25 @@ class StreamlitApp:
             datefmt="%H:%M:%S",
         )
 
-        st.set_page_config(page_title="Altibbi Chatbot", layout="wide")
+        st.set_page_config(
+            page_title="Altibbi Clinical Terminal",
+            page_icon=None,
+            layout="wide",
+            initial_sidebar_state="expanded",
+        )
+        ClinicalTerminalTheme.inject()
         self._initialize_session_state()
 
         selected_model, search_method = self._sidebar.render()
-        self._chat_view.render()
+
+        center_col, citation_col = st.columns([2.75, 1], gap="small")
+
+        with center_col:
+            self._chat_view.render(selected_model)
+
+        with citation_col:
+            self._citation_pane.render()
+
         self._handle_user_input(selected_model, search_method)
 
     def _initialize_session_state(self) -> None:
@@ -50,7 +69,11 @@ class StreamlitApp:
             self._handle_suggestion(selected_model, search_method)
             return
 
-        user_input = st.chat_input("Ask Altibbi... ", accept_file=True, file_type=["png", "jpg", "jpeg"])
+        user_input = st.chat_input(
+            "Enter clinical inquiry...",
+            accept_file=True,
+            file_type=["png", "jpg", "jpeg"],
+        )
         if not user_input:
             return
 
@@ -76,7 +99,11 @@ class StreamlitApp:
         *,
         is_drug_profile: bool = False,
     ) -> None:
-        spinner_label = "Searching Altibbi..." if not is_drug_profile else "Consulting Altibbi AI..."
+        spinner_label = (
+            "Retrieving clinical context..."
+            if not is_drug_profile
+            else "Analyzing pharmaceutical profile..."
+        )
         with st.spinner(spinner_label):
             try:
                 pipeline_result = self._chat_service.handle_text_query(
@@ -121,7 +148,7 @@ class StreamlitApp:
         img_file = user_input.files[0]
         img_bytes = img_file.getvalue()
 
-        with st.spinner("Classifying image type..."):
+        with st.spinner("Classifying medical image..."):
             image_result = self._chat_service.handle_image_upload(
                 img_bytes,
                 img_file.name,
@@ -179,5 +206,9 @@ class StreamlitApp:
             )
 
 
+class StreamlitApp(StreamlitChatApp):
+    """Backward-compatible alias for StreamlitChatApp."""
+
+
 if __name__ == "__main__":
-    StreamlitApp().run()
+    StreamlitChatApp().run()
