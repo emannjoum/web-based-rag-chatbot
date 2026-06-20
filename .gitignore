@@ -1,6 +1,10 @@
 .env
+*.env
 scraping.py
 scraped_classes.txt
 __pycache__
 *.txt
 codebase_refactoring.md
+Dockerfile
+docker-compose.yml
+pyproject.toml
