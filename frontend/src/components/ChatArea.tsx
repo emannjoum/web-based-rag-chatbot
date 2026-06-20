@@ -14,6 +14,9 @@ interface ChatAreaProps {
   models: ApiModelOption[];
   selectedModelId: string;
   onSelectModel: (modelId: string) => void;
+  searchMethods: string[];
+  selectedSearchMethod: string;
+  onSelectSearchMethod: (method: string) => void;
   isLoading: boolean;
   isSending: boolean;
   error: string | null;
@@ -30,6 +33,9 @@ export default function ChatArea({
   models,
   selectedModelId,
   onSelectModel,
+  searchMethods,
+  selectedSearchMethod,
+  onSelectSearchMethod,
   isLoading,
   isSending,
   error,
@@ -112,7 +118,7 @@ export default function ChatArea({
 
               return (
                 <div key={`${index}-assistant`}>
-                  <AssistantMessage markdown={message.content} sources={sources} />
+                  <AssistantMessage markdown={message.content} sources={sources} ragas_eval={message.ragas_eval} />
 
                   {isLatestAssistant && message.suggestions && message.suggestions.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -152,6 +158,9 @@ export default function ChatArea({
           models={models}
           selectedModelId={selectedModelId}
           onSelectModel={onSelectModel}
+          searchMethods={searchMethods}
+          selectedSearchMethod={selectedSearchMethod}
+          onSelectSearchMethod={onSelectSearchMethod}
           disabled={isSending || isLoading}
         />
       </div>

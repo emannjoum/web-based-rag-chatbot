@@ -23,6 +23,10 @@ export interface ApiChatMessage {
   content: string;
   sources?: Record<string, string>;
   suggestions?: string[];
+  ragas_eval?: {
+    faithfulness: number;
+    answer_relevancy: number;
+  };
 }
 
 export interface ApiSessionDetail {
@@ -59,6 +63,10 @@ export interface ChatMessage {
   content: string;
   sources?: Record<string, string>;
   suggestions?: string[];
+  ragas_eval?: {
+    faithfulness: number;
+    answer_relevancy: number;
+  };
 }
 
 export function sourcesToLinks(sources: Record<string, string> = {}): SourceLink[] {

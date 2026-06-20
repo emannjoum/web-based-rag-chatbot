@@ -218,6 +218,10 @@ export function useChat() {
     [refreshHistory, state.activeSessionId, state.searchMethod, state.selectedModelId],
   );
 
+  const selectSearchMethod = useCallback((method: string) => {
+    setState((current) => ({ ...current, searchMethod: method }));
+  }, []);
+
   const selectModel = useCallback((modelId: string) => {
     setState((current) => ({ ...current, selectedModelId: modelId }));
   }, []);
@@ -235,6 +239,7 @@ export function useChat() {
     sendMessage,
     uploadImage,
     selectModel,
+    selectSearchMethod,
     setError,
   };
 }

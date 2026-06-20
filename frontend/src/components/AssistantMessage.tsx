@@ -7,16 +7,37 @@ interface AssistantMessageProps {
   markdown: string;
   sources: SourceLink[];
   thoughtDurationSeconds?: number;
+  ragas_eval?: { faithfulness: number; answer_relevancy: number };
 }
 
 function formatCitations(text: string): string {
   return text.replace(/\[(\d+)\]/g, "[$1](#cite-$1)");
 }
 
+function getPageName(url: string): string {
+  try {
+    const { hostname, pathname } = new URL(url);
+    const domain = hostname.replace("www.", "").split(".")[0];
+    const pathParts = pathname.split("/").filter(Boolean);
+    const lastPart = pathParts[pathParts.length - 1];
+    
+    if (!lastPart) return domain.charAt(0).toUpperCase() + domain.slice(1);
+    
+    return lastPart
+      .replace(/[-_]/g, " ")
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  } catch (e) {
+    return url;
+  }
+}
+
 export default function AssistantMessage({
   markdown,
   sources,
   thoughtDurationSeconds = 4,
+  ragas_eval,
 }: AssistantMessageProps) {
   const [thoughtOpen, setThoughtOpen] = useState(false);
 
@@ -82,17 +103,23 @@ export default function AssistantMessage({
           <ol className="list-decimal space-y-1.5 pl-5 text-sm">
             {sources.map((source) => (
               <li key={source.id} id={`source-${source.id}`}>
-                <a
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sky-400 underline-offset-2 transition-colors hover:text-sky-300 hover:underline"
-                >
-                  {source.label}
-                </a>
+                <span className="text-sky-400">
+                  {getPageName(source.url)}
+                </span>
               </li>
             ))}
           </ol>
+        </div>
+      )}
+      {ragas_eval && (
+        <div className="mt-3 flex items-center gap-2 text-xs text-neutral-500">
+          <div className="flex h-1.5 w-full max-w-[100px] overflow-hidden rounded-full bg-neutral-800">
+            <div 
+              className="h-full bg-emerald-500/80" 
+              style={{ width: `${Math.max(0, Math.min(100, ragas_eval.faithfulness * 100))}%` }} 
+            />
+          </div>
+          <span>Faithfulness: {(ragas_eval.faithfulness * 100).toFixed(0)}%</span>
         </div>
       )}
     </div>

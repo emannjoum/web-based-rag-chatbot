@@ -9,6 +9,9 @@ interface ChatInputProps {
   models: ApiModelOption[];
   selectedModelId: string;
   onSelectModel: (modelId: string) => void;
+  searchMethods: string[];
+  selectedSearchMethod: string;
+  onSelectSearchMethod: (method: string) => void;
   disabled?: boolean;
 }
 
@@ -20,6 +23,9 @@ export default function ChatInput({
   models,
   selectedModelId,
   onSelectModel,
+  searchMethods,
+  selectedSearchMethod,
+  onSelectSearchMethod,
   disabled = false,
 }: ChatInputProps) {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -65,26 +71,50 @@ export default function ChatInput({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 px-1">
-        <span className="text-xs text-neutral-500">Pick Model:</span>
-        {models.map((model) => {
-          const isActive = model.id === selectedModelId;
-          return (
-            <button
-              key={model.id}
-              type="button"
-              onClick={() => onSelectModel(model.id)}
-              disabled={disabled}
-              className={`rounded-full px-3 py-1 text-xs transition-colors disabled:opacity-50 ${
-                isActive
-                  ? "border border-white text-neutral-100 ring-1 ring-white"
-                  : "border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200"
-              }`}
-            >
-              {model.label}
-            </button>
-          );
-        })}
+      <div className="mt-3 flex flex-wrap items-center gap-4 px-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-neutral-500">Pick Model:</span>
+          {models.map((model) => {
+            const isActive = model.id === selectedModelId;
+            return (
+              <button
+                key={model.id}
+                type="button"
+                onClick={() => onSelectModel(model.id)}
+                disabled={disabled}
+                className={`rounded-full px-3 py-1 text-xs transition-colors disabled:opacity-50 ${
+                  isActive
+                    ? "border border-white text-neutral-100 ring-1 ring-white"
+                    : "border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200"
+                }`}
+              >
+                {model.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-neutral-500">Search Method:</span>
+          {searchMethods.map((method) => {
+            const isActive = method === selectedSearchMethod;
+            return (
+              <button
+                key={method}
+                type="button"
+                onClick={() => onSelectSearchMethod(method)}
+                disabled={disabled}
+                className={`rounded-full px-3 py-1 text-xs transition-colors disabled:opacity-50 ${
+                  isActive
+                    ? "border border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
+                    : "border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200"
+                }`}
+              >
+                {method}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

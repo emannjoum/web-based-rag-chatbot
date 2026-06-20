@@ -17,6 +17,8 @@ export default function MedicalChatbot() {
     isLoading,
     isSending,
     error,
+    config,
+    searchMethod,
     loadSession,
     startNewChat,
     deleteSession,
@@ -24,6 +26,7 @@ export default function MedicalChatbot() {
     sendMessage,
     uploadImage,
     selectModel,
+    selectSearchMethod,
     bootstrap,
   } = useChat();
 
@@ -70,6 +73,9 @@ export default function MedicalChatbot() {
         models={models}
         selectedModelId={selectedModelId}
         onSelectModel={selectModel}
+        searchMethods={config?.search_methods || []}
+        selectedSearchMethod={searchMethod}
+        onSelectSearchMethod={selectSearchMethod}
         isLoading={isLoading}
         isSending={isSending}
         error={error}

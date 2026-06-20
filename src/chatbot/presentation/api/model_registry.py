@@ -14,10 +14,8 @@ class ModelRegistry:
     """Maps UI-facing model identifiers to backend LLM provider values."""
 
     OPTIONS: tuple[ModelOption, ...] = (
-        ModelOption("kimi-k2.5", "Kimi K2.5", GEMINI_FLASH_LITE),
-        ModelOption("clinical-insight-3", "Clinical-Insight 3.0", GPT4O_MINI),
-        ModelOption("medilogic-4", "Medi-Logic 4", GPT4O_MINI),
-        ModelOption("medical-pricer", "Medical Pricer", GEMINI_FLASH_LITE),
+        ModelOption("gpt-4o-mini", "GPT-4o mini", GPT4O_MINI),
+        ModelOption("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite", GEMINI_FLASH_LITE),
     )
 
     @classmethod
