@@ -9,6 +9,9 @@ description = "Online-RAG medical chatbot"
 requires-python = ">=3.10"
 dependencies = [
     "streamlit",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
     "requests",
     "beautifulsoup4",
     "google-generativeai",
@@ -26,4 +29,7 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src", "."]
-include = ["altibbi*", "shared*"]
+include = ["chatbot*", "shared*"]
+
+[project.scripts]
+altibbi-api = "chatbot.presentation.api.main:run"

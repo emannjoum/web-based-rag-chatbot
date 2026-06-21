@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: altibbi-chatbot
+Version: 0.1.0
+Summary: Online-RAG medical chatbot
+Requires-Python: >=3.10
+Requires-Dist: streamlit
+Requires-Dist: fastapi
+Requires-Dist: uvicorn[standard]
+Requires-Dist: python-multipart
+Requires-Dist: requests
+Requires-Dist: beautifulsoup4
+Requires-Dist: google-generativeai
+Requires-Dist: googlesearch-python
+Requires-Dist: tavily-python
+Requires-Dist: openai
+Requires-Dist: python-dotenv
+Requires-Dist: ddgs
+Requires-Dist: pymongo
+Requires-Dist: ragas
+Requires-Dist: arabic-reshaper
+Requires-Dist: python-bidi
+Requires-Dist: Pillow

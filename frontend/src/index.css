@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-[#212121] text-neutral-100 antialiased;
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+}
+
+@layer components {
+  .prose-chat h2 {
+    @apply mb-2 mt-4 text-base font-semibold text-neutral-100;
+  }
+
+  .prose-chat h3 {
+    @apply mb-1.5 mt-3 text-sm font-semibold text-neutral-200;
+  }
+
+  .prose-chat p {
+    @apply mb-3 text-sm leading-relaxed text-neutral-300;
+  }
+
+  .prose-chat ul {
+    @apply mb-3 list-disc space-y-1.5 pl-5 text-sm text-neutral-300;
+  }
+
+  .prose-chat li {
+    @apply leading-relaxed;
+  }
+
+  .prose-chat strong {
+    @apply font-semibold text-neutral-100;
+  }
+
+  .citation-sup {
+    @apply ml-0.5 inline-flex align-super text-[10px] font-medium text-sky-400;
+  }
+}
