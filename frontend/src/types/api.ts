@@ -26,7 +26,8 @@ export interface ApiChatMessage {
   ragas_eval?: {
     faithfulness: number;
     answer_relevancy: number;
-  };
+  }
+  thoughtDurationSeconds?: number;
 }
 
 export interface ApiSessionDetail {
@@ -67,6 +68,7 @@ export interface ChatMessage {
     faithfulness: number;
     answer_relevancy: number;
   };
+  thoughtDurationSeconds?: number;
 }
 
 export function sourcesToLinks(sources: Record<string, string> = {}): SourceLink[] {

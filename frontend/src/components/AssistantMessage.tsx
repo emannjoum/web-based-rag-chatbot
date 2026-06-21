@@ -19,9 +19,16 @@ function getPageName(url: string): string {
     const { hostname, pathname } = new URL(url);
     const domain = hostname.replace("www.", "").split(".")[0];
     const pathParts = pathname.split("/").filter(Boolean);
-    const lastPart = pathParts[pathParts.length - 1];
+    let lastPart = pathParts[pathParts.length - 1];
     
     if (!lastPart) return domain.charAt(0).toUpperCase() + domain.slice(1);
+    
+    // Decode URL-encoded characters for correct Arabic rendering
+    try {
+      lastPart = decodeURIComponent(lastPart);
+    } catch (e) {
+      // Ignore if decoding fails
+    }
     
     return lastPart
       .replace(/[-_]/g, " ")
@@ -29,7 +36,11 @@ function getPageName(url: string): string {
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
   } catch (e) {
-    return url;
+    try {
+      return decodeURIComponent(url);
+    } catch {
+      return url;
+    }
   }
 }
 
@@ -103,9 +114,14 @@ export default function AssistantMessage({
           <ol className="list-decimal space-y-1.5 pl-5 text-sm">
             {sources.map((source) => (
               <li key={source.id} id={`source-${source.id}`}>
-                <span className="text-sky-400">
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sky-400 underline-offset-2 transition-colors hover:text-sky-300 hover:underline"
+                >
                   {getPageName(source.url)}
-                </span>
+                </a>
               </li>
             ))}
           </ol>

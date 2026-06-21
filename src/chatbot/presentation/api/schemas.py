@@ -39,7 +39,7 @@ class ChatMessageSchema(BaseModel):
     sources: dict[str, str] = Field(default_factory=dict)
     suggestions: list[str] = Field(default_factory=list)
     ragas_eval: dict[str, float] | None = Field(default=None)
-
+    thoughtDurationSeconds: float | None = None
 
 class SessionDetailResponse(BaseModel):
     session_id: str

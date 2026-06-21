@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+import time
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
@@ -30,6 +31,8 @@ class ChatController:
         provider_model = ModelRegistry.resolve_provider_value(payload.model_id)
         history = self._build_history(payload.session_id)
 
+        start_time = time.perf_counter()
+
         try:
             result = self._chat_service.handle_text_query(
                 payload.message,
@@ -50,6 +53,9 @@ class ChatController:
                 detail=str(exc),
             ) from exc
 
+        end_time = time.perf_counter()
+        thoughtDurationSeconds = round(end_time - start_time, 1)
+
         if not result.session_id:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -65,6 +71,7 @@ class ChatController:
                 content=result.response,
                 sources={str(key): value for key, value in result.sources.items()},
                 suggestions=result.suggestions,
+                thoughtDurationSeconds=thoughtDurationSeconds,
             ),
         )
 

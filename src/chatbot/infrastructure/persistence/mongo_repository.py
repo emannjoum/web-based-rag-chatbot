@@ -43,7 +43,6 @@ class MongoChatRepository:
             "content": response,
             "sources": structured_sources,
             "config": structured_metadata,
-            "extra": {},
             "is_delete": 0,
         }
 

@@ -48,34 +48,6 @@ export default function ChatArea({
 
   return (
     <main className="relative flex min-w-0 flex-1 flex-col bg-[#212121]">
-      <header className="flex shrink-0 items-center justify-between border-b border-neutral-800 px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-2 text-neutral-400">
-          <Lock className="h-4 w-4" />
-          <span className="hidden text-xs sm:inline">Secure clinical session</span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex -space-x-2">
-            {["A", "B", "C"].map((initial) => (
-              <div
-                key={initial}
-                className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#212121] bg-neutral-700 text-[10px] font-medium text-neutral-300"
-              >
-                {initial}
-              </div>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800"
-          >
-            <Triangle className="h-3 w-3 fill-current" />
-            <span className="hidden sm:inline">Deploy with Vercel</span>
-            <span className="sm:hidden">Deploy</span>
-          </button>
-        </div>
-      </header>
 
       {error && (
         <div className="mx-4 mt-3 flex items-center justify-between rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-2 text-sm text-red-300 sm:mx-6">
@@ -118,7 +90,9 @@ export default function ChatArea({
 
               return (
                 <div key={`${index}-assistant`}>
-                  <AssistantMessage markdown={message.content} sources={sources} ragas_eval={message.ragas_eval} />
+                  <AssistantMessage markdown={message.content} 
+                  sources={sources} ragas_eval={message.ragas_eval} 
+                  thoughtDurationSeconds={message.thoughtDurationSeconds} />
 
                   {isLatestAssistant && message.suggestions && message.suggestions.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2">
