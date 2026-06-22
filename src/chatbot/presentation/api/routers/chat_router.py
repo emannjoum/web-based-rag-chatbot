@@ -114,9 +114,13 @@ class ChatController:
             ) from exc
 
         if image_result.status == "drug" and image_result.drug_query:
+            message = image_result.drug_query
+            if caption:
+                message = f"I am asking about the drug: {image_result.drug_query}. Specifically: {caption}"
+                
             return self.complete(
                 ChatCompletionRequest(
-                    message=image_result.drug_query,
+                    message=message,
                     session_id=session_id,
                     model_id=model_id,
                     search_method=resolved_search,

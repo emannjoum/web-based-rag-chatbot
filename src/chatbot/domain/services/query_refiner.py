@@ -30,6 +30,7 @@ class QueryRefiner:
             "refined_query": user_query,
             "language": "ar",
             "chat_title": user_query[:30],
+            "needs_search": True,
         }
         try:
             parsed_json = JsonParser.safe_parse(content, default=default)
@@ -43,4 +44,5 @@ class QueryRefiner:
             chat_title=parsed_json.get("chat_title", user_query[:30]),
             refined_query=parsed_json.get("refined_query", user_query),
             language=parsed_json.get("language", "ar"),
+            needs_search=parsed_json.get("needs_search", True),
         )

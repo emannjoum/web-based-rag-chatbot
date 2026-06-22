@@ -35,31 +35,38 @@ class RAGPipeline:
     ) -> PipelineResult:
         refine_result = self._query_refiner.refine(query, chat_history, llm_provider)
 
-        try:
-            search_result = search_provider.search(refine_result.refined_query)
-        except SearchError as exc:
-            raise exc
-
         metadata = self._build_metadata(
             refine_result=refine_result,
             model_label=model_label,
             search_method_label=search_method_label,
         )
 
-        if not search_result.has_sources:
-            fallback_response = self._generate_fallback(query, refine_result.language, llm_provider)
-            metadata["status"] = "fallback"
-            return PipelineResult(
-                response=fallback_response,
+        if not refine_result.needs_search:
+            search_result = SearchResult(
+                context="The user is asking a follow-up question regarding the conversation history or an uploaded image. Please answer based strictly on the provided history.",
                 sources={},
-                suggestions=[],
-                metadata=metadata,
-                session_id=None,
-                message_id=None,
-                status="fallback",
-                refine_result=refine_result,
-                search_result=search_result,
+                raw_urls=[]
             )
+        else:
+            try:
+                search_result = search_provider.search(refine_result.refined_query)
+            except SearchError as exc:
+                raise exc
+
+            if not search_result.has_sources:
+                fallback_response = self._generate_fallback(query, refine_result.language, llm_provider)
+                metadata["status"] = "fallback"
+                return PipelineResult(
+                    response=fallback_response,
+                    sources={},
+                    suggestions=[],
+                    metadata=metadata,
+                    session_id=None,
+                    message_id=None,
+                    status="fallback",
+                    refine_result=refine_result,
+                    search_result=search_result,
+                )
 
         target_lang = LanguageResolver.resolve_target_language(refine_result.language)
         system_prompt = self._prompt_loader.build_system_prompt(

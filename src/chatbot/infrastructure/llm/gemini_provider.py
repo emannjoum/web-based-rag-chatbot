@@ -8,7 +8,7 @@ from chatbot.infrastructure.settings import Settings
 
 
 class GeminiProvider:
-    def __init__(self, settings: Settings, model: str = "gemini-1.5-flash") -> None:
+    def __init__(self, settings: Settings, model: str = "gemini-2.5-flash") -> None:
         settings.configure_gemini()
         self._model_name = model
 

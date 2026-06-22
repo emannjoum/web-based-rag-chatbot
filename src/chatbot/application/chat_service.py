@@ -100,6 +100,9 @@ class ChatService:
 
         if image_type == "report":
             report_prompt = self._container.prompt_loader.load_section("image", "report_analysis")
+            if caption:
+                report_prompt += f"\n\nUser's specific request/question: {caption}"
+            
             assistant_response = llm_provider.generate_vision(
                 report_prompt,
                 image_bytes,

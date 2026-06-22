@@ -10,6 +10,7 @@ class RefineResult:
     refined_query: str
     language: str
     chat_title: str
+    needs_search: bool = True
 
 
 @dataclass(frozen=True)

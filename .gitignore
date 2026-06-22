@@ -5,6 +5,7 @@ scraped_classes.txt
 __pycache__
 *.txt
 codebase_refactoring.md
+architecture.md
 Dockerfile
 docker-compose.yml
 pyproject.toml
