@@ -22,6 +22,9 @@ class Settings:
     cors_origins: list[str]
     default_search_method: str
     frontend_dist_path: Path
+    redis_url: str
+    redis_cache_enabled: bool
+    redis_cache_ttl_seconds: int
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -45,6 +48,9 @@ class Settings:
             cors_origins=[origin.strip() for origin in cors_raw.split(",") if origin.strip()],
             default_search_method=os.getenv("DEFAULT_SEARCH_METHOD", "Serper"),
             frontend_dist_path=Path(os.getenv("FRONTEND_DIST_PATH", str(dist_default))),
+            redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+            redis_cache_enabled=os.getenv("REDIS_CACHE_ENABLED", "true").lower() == "true",
+            redis_cache_ttl_seconds=int(os.getenv("REDIS_CACHE_TTL_SECONDS", "300")),
         )
 
     @cached_property

@@ -108,6 +108,17 @@ class MongoChatRepository:
         print(f"Deleted {result.modified_count} messages for session: {session_id}")
         return True
 
+    def find_session_id_for_message(self, message_id: Any) -> str | None:
+        try:
+            object_id = ObjectId(message_id) if isinstance(message_id, str) else message_id
+            doc = self._messages_col.find_one({"_id": object_id}, {"session_id": 1})
+            if not doc:
+                return None
+            return str(doc.get("session_id"))
+        except Exception as exc:
+            print(f"Failed to resolve session for message {message_id}: {exc}")
+            return None
+
 
 # Backward-compatible alias
 AltibbiDB = MongoChatRepository

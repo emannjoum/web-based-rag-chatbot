@@ -37,6 +37,9 @@ class PromptLoader:
     def build_system_prompt(self, context: str, language: str, target_lang: str) -> str:
         return self.render("system", context=context, target_lang=target_lang)
 
+    def build_conversational_prompt(self, context: str, target_lang: str) -> str:
+        return self.render("conversational", context=context, target_lang=target_lang)
+
     def build_refine_prompt(self, history_str: str, user_query: str) -> str:
         return self.render("refine", history_str=history_str, user_query=user_query)
 

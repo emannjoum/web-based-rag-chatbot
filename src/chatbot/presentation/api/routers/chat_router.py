@@ -136,6 +136,7 @@ class ChatController:
             {
                 "model": provider_model,
                 "content_type": image_result.status,
+                "has_report_upload": image_result.status == "report",
             },
         )
 

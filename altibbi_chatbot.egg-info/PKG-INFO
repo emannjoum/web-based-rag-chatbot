@@ -17,6 +17,7 @@ Requires-Dist: python-dotenv
 Requires-Dist: ddgs
 Requires-Dist: pymongo
 Requires-Dist: ragas
+Requires-Dist: redis
 Requires-Dist: arabic-reshaper
 Requires-Dist: python-bidi
 Requires-Dist: Pillow

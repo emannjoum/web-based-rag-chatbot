@@ -12,6 +12,11 @@ from chatbot.domain.ports.search_port import SearchPort
 from chatbot.shared.json_parser import JsonParser
 from chatbot.shared.text_cleaner import TextCleaner
 
+_HISTORY_ONLY_CONTEXT = (
+    "No additional Altibbi articles were retrieved. "
+    "Answer using the conversation history and any prior report analysis."
+)
+
 
 class RAGPipeline:
     def __init__(
@@ -30,6 +35,7 @@ class RAGPipeline:
         search_provider: SearchPort,
         *,
         is_drug_profile: bool = False,
+        relaxed_rag: bool = False,
         model_label: str = "",
         search_method_label: str = "",
     ) -> PipelineResult:
@@ -39,14 +45,15 @@ class RAGPipeline:
             refine_result=refine_result,
             model_label=model_label,
             search_method_label=search_method_label,
+            relaxed_rag=relaxed_rag,
         )
 
+        use_conversational = relaxed_rag or not refine_result.needs_search
+
         if not refine_result.needs_search:
-            search_result = SearchResult(
-                context="The user is asking a follow-up question regarding the conversation history or an uploaded image. Please answer based strictly on the provided history.",
-                sources={},
-                raw_urls=[]
-            )
+            search_result = SearchResult(context=_HISTORY_ONLY_CONTEXT, sources={}, raw_urls=[])
+        elif relaxed_rag:
+            search_result = self._optional_search(refine_result.refined_query, search_provider)
         else:
             try:
                 search_result = search_provider.search(refine_result.refined_query)
@@ -69,10 +76,11 @@ class RAGPipeline:
                 )
 
         target_lang = LanguageResolver.resolve_target_language(refine_result.language)
-        system_prompt = self._prompt_loader.build_system_prompt(
-            TextCleaner.clean(search_result.context),
-            refine_result.language,
-            target_lang,
+        context = TextCleaner.clean(search_result.context)
+        system_prompt = (
+            self._prompt_loader.build_conversational_prompt(context, target_lang)
+            if use_conversational
+            else self._prompt_loader.build_system_prompt(context, refine_result.language, target_lang)
         )
         user_prompt = (
             self._prompt_loader.build_drug_prompt(query, refine_result.language)
@@ -101,11 +109,30 @@ class RAGPipeline:
             search_result=search_result,
         )
 
+    def _optional_search(
+        self,
+        refined_query: str,
+        search_provider: SearchPort,
+    ) -> SearchResult:
+        if not refined_query.strip():
+            return SearchResult(context=_HISTORY_ONLY_CONTEXT, sources={}, raw_urls=[])
+
+        try:
+            search_result = search_provider.search(refined_query)
+        except SearchError:
+            return SearchResult(context=_HISTORY_ONLY_CONTEXT, sources={}, raw_urls=[])
+
+        if search_result.has_sources:
+            return search_result
+
+        return SearchResult(context=_HISTORY_ONLY_CONTEXT, sources={}, raw_urls=[])
+
     def _build_metadata(
         self,
         refine_result: RefineResult,
         model_label: str,
         search_method_label: str,
+        relaxed_rag: bool,
     ) -> dict[str, Any]:
         return {
             "model": model_label,
@@ -113,6 +140,7 @@ class RAGPipeline:
             "chat_title": refine_result.chat_title,
             "language": refine_result.language,
             "refined_query": refine_result.refined_query,
+            "relaxed_rag": relaxed_rag,
         }
 
     def _generate_fallback(

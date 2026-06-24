@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+@theme {
+  --color-surface-base: #1a1f24;
+  --color-surface-raised: #232a31;
+  --color-surface-overlay: #2c343d;
+  --color-surface-muted: #151a1e;
+  --color-border-subtle: #343d47;
+  --color-border-soft: #3d4854;
+  --color-accent: #5b8a72;
+  --color-accent-soft: #4a7360;
+  --color-accent-muted: #3d5f50;
+  --color-accent-tint: #5b8a7218;
+  --color-warm: #c4a882;
+  --color-warm-muted: #a68b6a;
+  --color-text-primary: #eef2f0;
+  --color-text-secondary: #b8c4be;
+  --color-text-muted: #7a8a82;
+  --color-user-bubble: #2e3d4a;
+  --font-sans: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: "Literata", Georgia, "Times New Roman", serif;
+}
+
 @layer base {
   html,
   body,
@@ -8,26 +29,54 @@
   }
 
   body {
-    @apply bg-[#212121] text-neutral-100 antialiased;
-    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    @apply bg-surface-base text-text-primary antialiased;
+    font-family: var(--font-sans);
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, #5b8a720a, transparent),
+      radial-gradient(ellipse 60% 40% at 100% 100%, #c4a88206, transparent);
+  }
+
+  ::selection {
+    background-color: #5b8a7240;
+    color: var(--color-text-primary);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-subtle);
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-soft);
   }
 }
 
 @layer components {
   .prose-chat h2 {
-    @apply mb-2 mt-4 text-base font-semibold text-neutral-100;
+    @apply mb-2 mt-5 text-base font-semibold text-text-primary;
+    font-family: var(--font-serif);
   }
 
   .prose-chat h3 {
-    @apply mb-1.5 mt-3 text-sm font-semibold text-neutral-200;
+    @apply mb-1.5 mt-4 text-sm font-semibold text-text-secondary;
+    font-family: var(--font-serif);
   }
 
   .prose-chat p {
-    @apply mb-3 text-sm leading-relaxed text-neutral-300;
+    @apply mb-3 text-sm leading-relaxed text-text-secondary;
   }
 
   .prose-chat ul {
-    @apply mb-3 list-disc space-y-1.5 pl-5 text-sm text-neutral-300;
+    @apply mb-3 list-disc space-y-1.5 pl-5 text-sm text-text-secondary;
   }
 
   .prose-chat li {
@@ -35,10 +84,46 @@
   }
 
   .prose-chat strong {
-    @apply font-semibold text-neutral-100;
+    @apply font-semibold text-text-primary;
   }
 
   .citation-sup {
-    @apply ml-0.5 inline-flex align-super text-[10px] font-medium text-sky-400;
+    @apply ml-0.5 inline-flex align-super text-[10px] font-medium text-accent;
+  }
+
+  .surface-card {
+    @apply rounded-xl border border-border-subtle bg-surface-raised/80 backdrop-blur-sm;
+  }
+
+  .chip-active {
+    @apply border-accent/50 bg-accent-tint text-accent;
+  }
+
+  .chip-inactive {
+    @apply border-border-subtle text-text-muted transition-colors hover:border-border-soft hover:text-text-secondary;
+  }
+
+  @keyframes gentle-pulse {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  .animate-gentle-pulse {
+    animation: gentle-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes ring-fill {
+    from {
+      stroke-dashoffset: var(--ring-circumference);
+    }
+  }
+
+  .faithfulness-ring {
+    animation: ring-fill 1s ease-out forwards;
   }
 }

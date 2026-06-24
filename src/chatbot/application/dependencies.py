@@ -7,6 +7,8 @@ from chatbot.domain.ports.search_port import SearchPort
 from chatbot.domain.prompts.loader import PromptLoader
 from chatbot.domain.services.query_refiner import QueryRefiner
 from chatbot.domain.services.rag_pipeline import RAGPipeline
+from chatbot.infrastructure.cache.cached_repository import CachedChatRepository
+from chatbot.infrastructure.cache.redis_client import create_redis_client
 from chatbot.infrastructure.evaluation.ragas_evaluator import RagasEvaluator
 from chatbot.infrastructure.llm.factory import LLMProviderFactory
 from chatbot.infrastructure.logging.query_logger import QueryLogger
@@ -23,7 +25,18 @@ class DependencyContainer:
         self._prompt_loader = PromptLoader()
         self._query_refiner = QueryRefiner(self._prompt_loader)
         self._rag_pipeline = RAGPipeline(self._query_refiner, self._prompt_loader)
-        self._repository = MongoChatRepository(self._settings.mongodb_uri)
+        mongo_repository = MongoChatRepository(self._settings.mongodb_uri)
+        redis_client = (
+            create_redis_client(self._settings.redis_url)
+            if self._settings.redis_cache_enabled
+            else None
+        )
+        self._repository = CachedChatRepository(
+            mongo_repository,
+            redis_client,
+            ttl_seconds=self._settings.redis_cache_ttl_seconds,
+            enabled=self._settings.redis_cache_enabled,
+        )
         self._query_logger = QueryLogger()
         self._evaluator = RagasEvaluator(self._settings)
 

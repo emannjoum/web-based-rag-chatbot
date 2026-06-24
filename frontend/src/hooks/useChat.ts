@@ -78,6 +78,51 @@ export function useChat() {
     void bootstrap();
   }, [bootstrap]);
 
+  useEffect(() => {
+    const sessionId = state.activeSessionId;
+    if (!sessionId || state.isSending || state.isLoading) return;
+
+    const lastAssistant = [...state.messages].reverse().find((m) => m.role === "assistant");
+    if (!lastAssistant || lastAssistant.ragas_eval) return;
+    if (!lastAssistant.sources || Object.keys(lastAssistant.sources).length === 0) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 15;
+
+    const poll = async () => {
+      if (cancelled || attempts >= maxAttempts) return;
+      attempts += 1;
+
+      try {
+        const detail = await apiClient.getSession(sessionId);
+        if (cancelled) return;
+
+        const updatedAssistant = [...detail.messages]
+          .reverse()
+          .find((m) => m.role === "assistant");
+
+        if (updatedAssistant?.ragas_eval) {
+          setState((current) => ({
+            ...current,
+            messages: detail.messages,
+          }));
+          return;
+        }
+
+        setTimeout(poll, 2000);
+      } catch {
+        // Silently stop polling on error
+      }
+    };
+
+    const timer = setTimeout(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [state.activeSessionId, state.isSending, state.isLoading, state.messages]);
+
   const loadSession = useCallback(async (sessionId: string) => {
     setState((current) => ({ ...current, isLoading: true, error: null }));
     try {

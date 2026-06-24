@@ -4,6 +4,7 @@ from chatbot.application.dependencies import DependencyContainer
 from chatbot.domain.exceptions import SearchError
 from chatbot.domain.models import ImageHandlingResult, PipelineResult
 from chatbot.domain.ports.llm_port import LLMPort
+from chatbot.domain.services.session_context import has_report_upload_context
 
 
 class ChatService:
@@ -28,6 +29,7 @@ class ChatService:
     ) -> PipelineResult:
         llm_provider = self._container.create_llm_provider(model_choice)
         search_provider = self._container.create_search_provider(search_method)
+        relaxed_rag = has_report_upload_context(chat_history)
 
         try:
             pipeline_result = self._container.rag_pipeline.execute(
@@ -36,6 +38,7 @@ class ChatService:
                 llm_provider,
                 search_provider,
                 is_drug_profile=is_drug_profile,
+                relaxed_rag=relaxed_rag,
                 model_label=model_choice,
                 search_method_label=search_method,
             )
@@ -84,25 +87,19 @@ class ChatService:
         caption: str | None,
         model_choice: str,
     ) -> ImageHandlingResult:
-        user_message = f"[Uploaded an Image: {filename}]"
-        if caption:
-            user_message += f" (Message: {caption})"
-
         llm_provider = self._container.create_llm_provider(model_choice)
         image_type = self._classify_image(image_bytes, llm_provider)
 
-        if image_type not in {"report", "drug"}:
-            return ImageHandlingResult(
-                status="unsupported",
-                user_message=user_message,
-                assistant_response=self.UNSUPPORTED_IMAGE_MESSAGE,
-            )
-
         if image_type == "report":
+            user_message = self._build_upload_user_message(filename, caption, "Attached medical report")
             report_prompt = self._container.prompt_loader.load_section("image", "report_analysis")
             if caption:
-                report_prompt += f"\n\nUser's specific request/question: {caption}"
-            
+                report_prompt += (
+                    f'\n\nThe user attached this specific question or instruction alongside the report:\n'
+                    f'"{caption.strip()}"\n\n'
+                    "Address this question directly while analyzing the report."
+                )
+
             assistant_response = llm_provider.generate_vision(
                 report_prompt,
                 image_bytes,
@@ -114,13 +111,28 @@ class ChatService:
                 assistant_response=assistant_response,
             )
 
-        extraction_prompt = self._container.prompt_loader.load_section("image", "drug_extraction")
-        drug_query = self._extract_drug_name(image_bytes, llm_provider, extraction_prompt)
+        if image_type == "drug":
+            user_message = self._build_upload_user_message(filename, caption, "Uploaded drug image")
+            extraction_prompt = self._container.prompt_loader.load_section("image", "drug_extraction")
+            drug_query = self._extract_drug_name(image_bytes, llm_provider, extraction_prompt)
+            return ImageHandlingResult(
+                status="drug",
+                user_message=user_message,
+                drug_query=drug_query,
+            )
+
+        user_message = self._build_upload_user_message(filename, caption, "Uploaded an Image")
         return ImageHandlingResult(
-            status="drug",
+            status="unsupported",
             user_message=user_message,
-            drug_query=drug_query,
+            assistant_response=self.UNSUPPORTED_IMAGE_MESSAGE,
         )
+
+    @staticmethod
+    def _build_upload_user_message(filename: str, caption: str | None, label: str) -> str:
+        if caption:
+            return f"{caption.strip()}\n\n[{label}: {filename}]"
+        return f"[{label}: {filename}]"
 
     def persist_simple_exchange(
         self,
