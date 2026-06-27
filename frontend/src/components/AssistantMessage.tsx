@@ -8,7 +8,8 @@ interface AssistantMessageProps {
   markdown: string;
   sources: SourceLink[];
   thoughtDurationSeconds?: number;
-  ragas_eval?: { faithfulness: number; answer_relevancy: number };
+  ragas_eval?: { faithfulness: number; answer_relevancy: number } | null;
+  eval_status?: "pending" | "success" | "failed" | null;
 }
 
 function formatCitations(text: string): string {
@@ -49,6 +50,7 @@ export default function AssistantMessage({
   sources,
   thoughtDurationSeconds = 4,
   ragas_eval,
+  eval_status,
 }: AssistantMessageProps) {
   const [thoughtOpen, setThoughtOpen] = useState(false);
 
@@ -76,8 +78,8 @@ export default function AssistantMessage({
 
           {thoughtOpen && (
             <div className="mb-4 rounded-lg border border-border-subtle/60 bg-surface-muted/60 px-3.5 py-2.5 text-xs leading-relaxed text-text-muted">
-              Searched the Altibbi knowledge base, reviewed matched documentation, and composed a
-              response with inline source citations.
+              Searched the knowledge base, reviewed matched documentation, and composed a
+              response with inline source citations from Altibbi.
             </div>
           )}
 
@@ -138,7 +140,11 @@ export default function AssistantMessage({
       )}
 
       <div className="ml-11">
-        <FaithfulnessCard ragas_eval={ragas_eval} hasSources={sources.length > 0} />
+        <FaithfulnessCard
+          ragas_eval={ragas_eval}
+          eval_status={eval_status}
+          hasSources={sources.length > 0}
+        />
       </div>
     </div>
   );

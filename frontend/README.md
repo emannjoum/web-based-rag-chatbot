@@ -1,4 +1,4 @@
-# Altibbi Medical Chatbot — React UI
+# MedAtlas Chatbot — React UI
 
 Standalone React frontend wired to the FastAPI backend.
 

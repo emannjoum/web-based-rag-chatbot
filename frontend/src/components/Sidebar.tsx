@@ -67,7 +67,7 @@ export default function Sidebar({
             </span>
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold text-text-primary">Altibbi</h1>
+            <h1 className="truncate text-sm font-semibold text-text-primary">MedAtlas</h1>
             <p className="text-[11px] text-text-muted">Medical assistant</p>
           </div>
         </div>

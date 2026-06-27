@@ -1,1 +1,1 @@
-"""Altibbi RAG chatbot application package."""
+"""MedAtlas RAG chatbot application package."""

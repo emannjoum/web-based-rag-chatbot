@@ -43,6 +43,7 @@ class MongoChatRepository:
             "content": response,
             "sources": structured_sources,
             "config": structured_metadata,
+            "eval_status": "pending" if structured_sources else None,
             "is_delete": 0,
         }
 
@@ -81,7 +82,12 @@ class MongoChatRepository:
             )
         )
 
-    def update_eval_scores(self, message_id: Any, ragas_scores: dict[str, Any]) -> None:
+    def update_eval_scores(
+        self,
+        message_id: Any,
+        ragas_scores: dict[str, Any] | None,
+        eval_status: str = "success",
+    ) -> None:
         if not message_id:
             return
 
@@ -92,6 +98,7 @@ class MongoChatRepository:
                 {
                     "$set": {
                         "ragas_eval": ragas_scores,
+                        "eval_status": eval_status,
                         "eval_at": datetime.datetime.now(datetime.timezone.utc),
                     }
                 },
@@ -121,4 +128,4 @@ class MongoChatRepository:
 
 
 # Backward-compatible alias
-AltibbiDB = MongoChatRepository
+MedAtlasDB = MongoChatRepository

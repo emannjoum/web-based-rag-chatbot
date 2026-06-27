@@ -13,7 +13,7 @@ from chatbot.shared.json_parser import JsonParser
 from chatbot.shared.text_cleaner import TextCleaner
 
 _HISTORY_ONLY_CONTEXT = (
-    "No additional Altibbi articles were retrieved. "
+    "No additional articles were retrieved. "
     "Answer using the conversation history and any prior report analysis."
 )
 

@@ -9,7 +9,7 @@ class ChatViewComponent:
         self._suggestions = SuggestionsComponent()
 
     def render(self) -> None:
-        st.title("Altibbi Chatbot")
+        st.title("MedAtlas Chatbot")
         messages = st.session_state.messages
 
         for idx, message in enumerate(messages):

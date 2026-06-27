@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { AlertCircle, BookOpen, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 
 interface RagasEval {
   faithfulness: number;
@@ -7,7 +7,8 @@ interface RagasEval {
 }
 
 interface FaithfulnessCardProps {
-  ragas_eval?: RagasEval;
+  ragas_eval?: RagasEval | null;
+  eval_status?: "pending" | "success" | "failed" | null;
   hasSources: boolean;
 }
 
@@ -23,7 +24,7 @@ function getAlignmentTier(score: number): AlignmentTier {
   if (pct >= 80) {
     return {
       label: "Strong alignment",
-      description: "This answer closely reflects the cited Altibbi sources.",
+      description: "This answer closely reflects the cited sources.",
       color: "#6b9e82",
       trackColor: "#6b9e8225",
     };
@@ -110,19 +111,37 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
   );
 }
 
-export default function FaithfulnessCard({ ragas_eval, hasSources }: FaithfulnessCardProps) {
+export default function FaithfulnessCard({
+  ragas_eval,
+  eval_status,
+  hasSources,
+}: FaithfulnessCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   if (!hasSources) return null;
 
-  if (!ragas_eval) {
+  if (eval_status === "failed") {
+    return (
+      <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-600/40 bg-amber-950/20 px-4 py-3">
+        <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
+        <div>
+          <p className="text-xs font-medium text-amber-200">Source alignment unavailable</p>
+          <p className="text-[11px] text-amber-100/70">
+            Evaluation could not be completed for this response.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!ragas_eval || eval_status === "pending" || !eval_status) {
     return (
       <div className="mt-4 flex items-center gap-3 rounded-xl border border-border-subtle/60 bg-surface-muted/50 px-4 py-3">
         <Loader2 className="h-4 w-4 shrink-0 animate-spin text-accent/70" />
         <div>
           <p className="text-xs font-medium text-text-secondary">Verifying source alignment</p>
           <p className="text-[11px] text-text-muted animate-gentle-pulse">
-            Comparing this answer against cited Altibbi content…
+            Comparing this answer against cited content…
           </p>
         </div>
       </div>
@@ -178,7 +197,7 @@ export default function FaithfulnessCard({ ragas_eval, hasSources }: Faithfulnes
 
           <p className="mt-3 text-[10px] leading-relaxed text-text-muted/80">
             Scores reflect how well this response is supported by and relevant to the retrieved
-            Altibbi sources — not a judgment on medical accuracy.
+            sources — not a judgment on medical accuracy.
           </p>
         </div>
       )}

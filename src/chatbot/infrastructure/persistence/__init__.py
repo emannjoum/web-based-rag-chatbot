@@ -1,4 +1,4 @@
-from chatbot.infrastructure.persistence.mongo_repository import AltibbiDB, MongoChatRepository
+from chatbot.infrastructure.persistence.mongo_repository import MedAtlasDB, MongoChatRepository
 from chatbot.infrastructure.persistence.protocol import ChatRepository
 
-__all__ = ["AltibbiDB", "ChatRepository", "MongoChatRepository"]
+__all__ = ["MedAtlasDB", "ChatRepository", "MongoChatRepository"]

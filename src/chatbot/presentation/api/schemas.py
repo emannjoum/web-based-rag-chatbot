@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
-    service: str = "altibbi-chatbot-api"
+    service: str = "medatlas-chatbot-api"
 
 
 class ModelOptionSchema(BaseModel):
@@ -39,6 +39,7 @@ class ChatMessageSchema(BaseModel):
     sources: dict[str, str] = Field(default_factory=dict)
     suggestions: list[str] = Field(default_factory=list)
     ragas_eval: dict[str, float] | None = Field(default=None)
+    eval_status: Literal["pending", "success", "failed"] | None = None
     thoughtDurationSeconds: float | None = None
 
 class SessionDetailResponse(BaseModel):

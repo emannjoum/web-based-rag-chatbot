@@ -1,5 +1,5 @@
 from chatbot.domain.exceptions import (
-    AltibbiError,
+    AppError,
     LLMError,
     PersistenceError,
     RefinementError,
@@ -15,7 +15,7 @@ from chatbot.domain.models import (
 )
 
 __all__ = [
-    "AltibbiError",
+    "AppError",
     "ChatMessage",
     "ImageHandlingResult",
     "LLMError",

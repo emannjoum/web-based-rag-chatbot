@@ -1,11 +1,6 @@
 import threading
 from typing import Any
 
-from datasets import Dataset
-from langchain_openai import ChatOpenAI
-from ragas import evaluate
-from ragas.metrics import answer_relevancy, faithfulness
-
 from chatbot.domain.ports.repository_port import ChatRepositoryPort
 from chatbot.infrastructure.settings import Settings
 
@@ -14,8 +9,19 @@ class RagasEvaluator:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def evaluate(self, query: str, response: str, context: str) -> dict[str, float]:
+    def evaluate(self, query: str, response: str, context: str) -> dict[str, float] | None:
+        if not self._settings.openai_api_key:
+            print("Ragas skipped: missing OPENAI_API_KEY")
+            return None
+
         try:
+            # Import lazily so missing optional ragas dependencies
+            # do not prevent API/container startup.
+            from datasets import Dataset
+            from langchain_openai import ChatOpenAI
+            from ragas import evaluate
+            from ragas.metrics import answer_relevancy, faithfulness
+
             eval_llm = ChatOpenAI(model="gpt-4o-mini", api_key=self._settings.openai_api_key)
             dataset = Dataset.from_dict(
                 {
@@ -28,7 +34,7 @@ class RagasEvaluator:
             return result.to_pandas().to_dict(orient="records")[0]
         except Exception as exc:
             print(f"Ragas Error: {exc}")
-            return {"faithfulness": 0.0, "answer_relevancy": 0.0}
+            return None
 
     def process_async(
         self,
@@ -40,9 +46,13 @@ class RagasEvaluator:
     ) -> None:
         try:
             scores = self.evaluate(query, response, context)
-            repository.update_eval_scores(message_id, scores)
+            if scores is None:
+                repository.update_eval_scores(message_id, None, "failed")
+            else:
+                repository.update_eval_scores(message_id, scores, "success")
         except Exception as exc:
             print(f"Async Eval Error: {exc}")
+            repository.update_eval_scores(message_id, None, "failed")
 
     def trigger_async(
         self,

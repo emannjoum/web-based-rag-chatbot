@@ -4,7 +4,7 @@ from chatbot.shared.arabic_renderer import ArabicTerminalRenderer
 
 
 class QueryLogger:
-    LOG_FILE_PATH = "altibbi_chat_logs.txt"
+    LOG_FILE_PATH = "medatlas_chat_logs.txt"
 
     def log(
         self,

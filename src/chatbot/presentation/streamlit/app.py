@@ -32,7 +32,7 @@ class StreamlitApp:
             datefmt="%H:%M:%S",
         )
 
-        st.set_page_config(page_title="Altibbi Chatbot", layout="wide")
+        st.set_page_config(page_title="MedAtlas Chatbot", layout="wide")
         self._initialize_session_state()
 
         selected_model, search_method = self._sidebar.render()
@@ -50,7 +50,7 @@ class StreamlitApp:
             self._handle_suggestion(selected_model, search_method)
             return
 
-        user_input = st.chat_input("Ask Altibbi... ", accept_file=True, file_type=["png", "jpg", "jpeg"])
+        user_input = st.chat_input("Ask MedAtlas... ", accept_file=True, file_type=["png", "jpg", "jpeg"])
         if not user_input:
             return
 
@@ -76,7 +76,7 @@ class StreamlitApp:
         *,
         is_drug_profile: bool = False,
     ) -> None:
-        spinner_label = "Searching Altibbi..." if not is_drug_profile else "Consulting Altibbi AI..."
+        spinner_label = "Searching..." if not is_drug_profile else "Consulting MedAtlas..."
         with st.spinner(spinner_label):
             try:
                 pipeline_result = self._chat_service.handle_text_query(

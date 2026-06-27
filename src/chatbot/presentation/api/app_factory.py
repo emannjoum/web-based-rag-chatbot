@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from chatbot.domain.exceptions import AltibbiError
+from chatbot.domain.exceptions import AppError
 from chatbot.infrastructure.settings import Settings
 from chatbot.presentation.api.routers.chat_router import router as chat_router
 from chatbot.presentation.api.routers.config_router import router as config_router
@@ -23,7 +23,7 @@ class ApiApplicationFactory:
 
     def create(self) -> FastAPI:
         app = FastAPI(
-            title="Altibbi Medical Chatbot API",
+            title="MedAtlas Chatbot API",
             version="1.0.0",
             docs_url="/api/docs",
             redoc_url="/api/redoc",
@@ -60,10 +60,10 @@ class ApiApplicationFactory:
                 | {"errors": exc.errors()},
             )
 
-        @app.exception_handler(AltibbiError)
-        async def altibbi_exception_handler(
+        @app.exception_handler(AppError)
+        async def app_exception_handler(
             _request: Request,
-            exc: AltibbiError,
+            exc: AppError,
         ) -> JSONResponse:
             logger.exception("Domain error: %s", exc)
             return JSONResponse(

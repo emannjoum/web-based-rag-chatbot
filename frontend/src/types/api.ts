@@ -26,7 +26,8 @@ export interface ApiChatMessage {
   ragas_eval?: {
     faithfulness: number;
     answer_relevancy: number;
-  }
+  } | null;
+  eval_status?: "pending" | "success" | "failed" | null;
   thoughtDurationSeconds?: number;
 }
 
@@ -67,7 +68,8 @@ export interface ChatMessage {
   ragas_eval?: {
     faithfulness: number;
     answer_relevancy: number;
-  };
+  } | null;
+  eval_status?: "pending" | "success" | "failed" | null;
   thoughtDurationSeconds?: number;
 }
 

@@ -17,7 +17,12 @@ class ChatRepositoryPort(Protocol):
 
     def get_chat_by_id(self, session_id: str) -> list[dict[str, Any]]: ...
 
-    def update_eval_scores(self, message_id: Any, ragas_scores: dict[str, Any]) -> None: ...
+    def update_eval_scores(
+        self,
+        message_id: Any,
+        ragas_scores: dict[str, Any] | None,
+        eval_status: str = "success",
+    ) -> None: ...
 
     def delete_chat(self, session_id: str) -> bool: ...
 

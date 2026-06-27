@@ -8,6 +8,6 @@ codebase_refactoring.md
 architecture.md
 redis_caching.md
 image_captioning.md
-Dockerfile
-docker-compose.yml
 pyproject.toml
+build/
+*.egg-info/

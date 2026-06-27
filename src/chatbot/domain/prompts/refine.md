@@ -1,5 +1,5 @@
 Given the conversation history (if any) and the last question, perform two tasks:
-1. Rephrase the new question into a standalone medical search query (for Altibbi database searching).
+1. Rephrase the new question into a standalone medical search query (for database searching).
    Set "needs_search" to false (and leave refined_query as an empty string) when ANY of these apply:
    - The question is a direct follow-up about a medical report or image already discussed in the history.
    - The history contains an uploaded medical report and the user is asking about those results, values, or implications.

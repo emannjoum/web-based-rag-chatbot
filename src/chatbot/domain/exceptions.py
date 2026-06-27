@@ -1,18 +1,18 @@
-class AltibbiError(Exception):
-    """Base exception for Altibbi chatbot errors."""
+class AppError(Exception):
+    """Base exception for MedAtlas chatbot errors."""
 
 
-class SearchError(AltibbiError):
+class SearchError(AppError):
     """Raised when context retrieval from external search providers fails."""
 
 
-class LLMError(AltibbiError):
+class LLMError(AppError):
     """Raised when an LLM provider call fails."""
 
 
-class RefinementError(AltibbiError):
+class RefinementError(AppError):
     """Raised when query refinement or JSON parsing fails irrecoverably."""
 
 
-class PersistenceError(AltibbiError):
+class PersistenceError(AppError):
     """Raised when a database read or write operation fails."""

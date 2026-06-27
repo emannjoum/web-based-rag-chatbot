@@ -84,8 +84,13 @@ class CachedChatRepository:
         self._cache_session(session_id, messages)
         return messages
 
-    def update_eval_scores(self, message_id: Any, ragas_scores: dict[str, Any]) -> None:
-        self._repository.update_eval_scores(message_id, ragas_scores)
+    def update_eval_scores(
+        self,
+        message_id: Any,
+        ragas_scores: dict[str, Any] | None,
+        eval_status: str = "success",
+    ) -> None:
+        self._repository.update_eval_scores(message_id, ragas_scores, eval_status)
         if not self._enabled:
             return
 

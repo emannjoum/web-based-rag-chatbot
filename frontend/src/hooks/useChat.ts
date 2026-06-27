@@ -65,7 +65,7 @@ export function useChat() {
       const message =
         error instanceof ApiClientError
           ? error.message
-          : "Unable to reach the Altibbi API. Ensure the backend is running.";
+          : "Unable to reach the MedAtlas API. Ensure the backend is running.";
       setState((current) => ({
         ...current,
         isLoading: false,
@@ -83,7 +83,14 @@ export function useChat() {
     if (!sessionId || state.isSending || state.isLoading) return;
 
     const lastAssistant = [...state.messages].reverse().find((m) => m.role === "assistant");
-    if (!lastAssistant || lastAssistant.ragas_eval) return;
+    if (
+      !lastAssistant ||
+      lastAssistant.ragas_eval ||
+      lastAssistant.eval_status === "success" ||
+      lastAssistant.eval_status === "failed"
+    ) {
+      return;
+    }
     if (!lastAssistant.sources || Object.keys(lastAssistant.sources).length === 0) return;
 
     let cancelled = false;
@@ -102,7 +109,11 @@ export function useChat() {
           .reverse()
           .find((m) => m.role === "assistant");
 
-        if (updatedAssistant?.ragas_eval) {
+        if (
+          updatedAssistant?.ragas_eval ||
+          updatedAssistant?.eval_status === "success" ||
+          updatedAssistant?.eval_status === "failed"
+        ) {
           setState((current) => ({
             ...current,
             messages: detail.messages,

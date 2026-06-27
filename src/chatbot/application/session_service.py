@@ -57,5 +57,7 @@ class SessionService:
             if role == "assistant":
                 sources = doc.get("sources") or {}
                 entry["sources"] = {str(key): str(value) for key, value in sources.items()}
+                entry["ragas_eval"] = doc.get("ragas_eval")
+                entry["eval_status"] = doc.get("eval_status")
             normalized.append(entry)
         return normalized

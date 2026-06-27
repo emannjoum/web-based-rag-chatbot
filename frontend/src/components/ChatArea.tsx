@@ -125,6 +125,7 @@ export default function ChatArea({
                     markdown={message.content}
                     sources={sources}
                     ragas_eval={message.ragas_eval}
+                    eval_status={message.eval_status}
                     thoughtDurationSeconds={message.thoughtDurationSeconds}
                   />
 
@@ -155,7 +156,7 @@ export default function ChatArea({
             {isSending && (
               <div className="ml-11 flex items-center gap-2.5 text-sm text-text-muted">
                 <Loader2 className="h-4 w-4 animate-spin text-accent/70" />
-                <span className="animate-gentle-pulse">Consulting Altibbi knowledge base…</span>
+                <span className="animate-gentle-pulse">Consulting MedAtlas knowledge base…</span>
               </div>
             )}
           </div>

@@ -5,7 +5,7 @@ import time
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from chatbot.application.chat_service import ChatService
-from chatbot.domain.exceptions import AltibbiError, SearchError
+from chatbot.domain.exceptions import AppError, SearchError
 from chatbot.presentation.api.dependencies import get_chat_service, get_container
 from chatbot.presentation.api.model_registry import ModelRegistry
 from chatbot.presentation.api.schemas import (
@@ -47,7 +47,7 @@ class ChatController:
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=str(exc),
             ) from exc
-        except AltibbiError as exc:
+        except AppError as exc:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=str(exc),
@@ -71,6 +71,7 @@ class ChatController:
                 content=result.response,
                 sources={str(key): value for key, value in result.sources.items()},
                 suggestions=result.suggestions,
+                eval_status="pending" if result.sources else None,
                 thoughtDurationSeconds=thoughtDurationSeconds,
             ),
         )
@@ -107,7 +108,7 @@ class ChatController:
                 caption,
                 provider_model,
             )
-        except AltibbiError as exc:
+        except AppError as exc:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=str(exc),
