@@ -19,7 +19,7 @@ interface UseChatState {
   error: string | null;
 }
 
-export function useChat() {
+export function useChat(isAuthenticated: boolean) {
   const [state, setState] = useState<UseChatState>({
     config: null,
     history: [],
@@ -75,8 +75,22 @@ export function useChat() {
   }, [refreshHistory]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setState({
+        config: null,
+        history: [],
+        messages: [],
+        activeSessionId: null,
+        selectedModelId: "",
+        searchMethod: "Serper",
+        isLoading: false,
+        isSending: false,
+        error: null,
+      });
+      return;
+    }
     void bootstrap();
-  }, [bootstrap]);
+  }, [bootstrap, isAuthenticated]);
 
   useEffect(() => {
     const sessionId = state.activeSessionId;

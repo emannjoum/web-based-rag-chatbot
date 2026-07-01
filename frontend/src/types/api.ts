@@ -48,6 +48,18 @@ export interface ApiErrorBody {
   code?: string;
 }
 
+export interface ApiUser {
+  id: number;
+  email: string;
+  display_name: string;
+}
+
+export interface ApiAuthResponse {
+  access_token: string;
+  token_type: "bearer";
+  user: ApiUser;
+}
+
 export interface SourceLink {
   id: number;
   label: string;

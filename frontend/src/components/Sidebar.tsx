@@ -1,12 +1,14 @@
 import { useState } from "react";
 import {
   ChevronUp,
+  LogOut,
   MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
   Trash2,
   User,
 } from "lucide-react";
+import type { ApiUser } from "../types/api";
 import type { ChatHistoryItem } from "../types/api";
 import { useGroupedHistory } from "../hooks/useGroupedHistory";
 
@@ -15,10 +17,12 @@ interface SidebarProps {
   onToggle: () => void;
   history: ChatHistoryItem[];
   activeChatId: string | null;
+  user: ApiUser | null;
   onSelectChat: (id: string) => void;
   onNewChat: () => void;
   onDeleteAll: () => void;
   onDeleteChat: (id: string) => void;
+  onLogout: () => void;
 }
 
 export default function Sidebar({
@@ -26,12 +30,15 @@ export default function Sidebar({
   onToggle,
   history,
   activeChatId,
+  user,
   onSelectChat,
   onNewChat,
   onDeleteAll,
   onDeleteChat,
+  onLogout,
 }: SidebarProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const groupedHistory = useGroupedHistory(history);
 
   if (!isOpen) {
@@ -167,18 +174,47 @@ export default function Sidebar({
       </div>
 
       <div className="sticky bottom-0 border-t border-border-subtle bg-surface-muted p-3">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-overlay"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-overlay ring-1 ring-border-subtle">
-              <User className="h-4 w-4 text-text-muted" />
+        <div className="relative">
+          {accountMenuOpen && (
+            <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-lg border border-border-subtle bg-surface-base shadow-lg">
+              <div className="border-b border-border-subtle px-3 py-2">
+                <p className="truncate text-sm font-medium text-text-primary">
+                  {user?.display_name ?? "Account"}
+                </p>
+                <p className="truncate text-xs text-text-muted">{user?.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  onLogout();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-text-secondary transition-colors hover:bg-surface-overlay hover:text-red-400/80"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
             </div>
-            <span>Guest</span>
-          </div>
-          <ChevronUp className="h-4 w-4 text-text-muted" />
-        </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setAccountMenuOpen((open) => !open)}
+            className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-overlay"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-overlay ring-1 ring-border-subtle">
+                <User className="h-4 w-4 text-text-muted" />
+              </div>
+              <span className="truncate">{user?.display_name ?? "Account"}</span>
+            </div>
+            <ChevronUp
+              className={`h-4 w-4 text-text-muted transition-transform ${
+                accountMenuOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+        </div>
       </div>
     </aside>
   );

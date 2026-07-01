@@ -1,12 +1,26 @@
 import { useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import ChatArea from "./ChatArea";
+import AuthModal from "./AuthModal";
+import { useAuth } from "../hooks/useAuth";
 import { useChat } from "../hooks/useChat";
 
 export default function MedicalChatbot() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [inputValue, setInputValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const {
+    user,
+    isAuthenticated,
+    isLoading: isAuthLoading,
+    error: authError,
+    login,
+    register,
+    logout,
+    clearError,
+  } = useAuth();
 
   const {
     history,
@@ -28,7 +42,7 @@ export default function MedicalChatbot() {
     selectModel,
     selectSearchMethod,
     bootstrap,
-  } = useChat();
+  } = useChat(isAuthenticated);
 
   const handleSend = async () => {
     const text = inputValue.trim();
@@ -50,6 +64,25 @@ export default function MedicalChatbot() {
     setInputValue("");
   };
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-surface-base">
+        <Loader2 className="h-8 w-8 animate-spin text-accent/70" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <AuthModal
+        error={authError}
+        onLogin={login}
+        onRegister={register}
+        onClearError={clearError}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
@@ -57,10 +90,12 @@ export default function MedicalChatbot() {
         onToggle={() => setSidebarOpen((open) => !open)}
         history={history}
         activeChatId={activeSessionId}
+        user={user}
         onSelectChat={(id) => void loadSession(id)}
         onNewChat={startNewChat}
         onDeleteAll={() => void deleteAllSessions()}
         onDeleteChat={(id) => void deleteSession(id)}
+        onLogout={logout}
       />
 
       <ChatArea

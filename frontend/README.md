@@ -11,8 +11,9 @@ Run the API and frontend in separate terminals.
 ```bash
 # from repository root
 cp .env.example .env
+cd backend
 pip install -e .
-PYTHONPATH=src python -m chatbot.presentation.api.main
+python -m chatbot.presentation.api.main
 ```
 
 API: `http://127.0.0.1:8000`  
@@ -47,8 +48,8 @@ Serves the built React app and API on port `8000`.
 
 ```bash
 cd frontend && npm ci && npm run build
-cd ..
-FRONTEND_DIST_PATH=frontend/dist PYTHONPATH=src python -m chatbot.presentation.api.main
+cd ../backend
+FRONTEND_DIST_PATH=../frontend/dist python -m chatbot.presentation.api.main
 ```
 
 ## API Endpoints
